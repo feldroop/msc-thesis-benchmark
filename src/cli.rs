@@ -1,9 +1,15 @@
 use clap::Parser;
 use std::path::PathBuf;
 
+use crate::benchmarks::Benchmark;
+
 #[derive(Parser)]
-#[command()]
 pub struct Args {
-    #[arg(default_value = "benchmark_config.toml")]
+    #[arg(short, long, default_value = "benchmark_config.toml")]
     pub config_file: PathBuf,
+
+    /// Give benchmark names that should be run.
+    /// If none are given, all will be run
+    #[arg(value_enum)]
+    pub benchmarks: Option<Vec<Benchmark>>,
 }
