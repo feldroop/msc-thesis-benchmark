@@ -187,7 +187,7 @@ fn query_error_rate(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
                             ..Default::default()
                         },
                     },
-                    format!("query_error_rate_{query_error_ratio}"),
+                    format!("query_error_rate_{query_error_ratio}").replace('.', "_"),
                 )
             }),
         benchmark_name: "query_error_rate",
@@ -231,6 +231,7 @@ where
             BenchmarkFolder::new(&suite_config.output_folder, self.benchmark_name);
 
         let mut floxer_results = Vec::new();
+        let mut instance_names = Vec::new();
 
         for (floxer_config, instance_name) in self.floxer_configs_with_names {
             let res = floxer_config.run(
@@ -241,14 +242,29 @@ where
             )?;
 
             floxer_results.push(res);
+            instance_names.push(instance_name);
         }
 
-        plots::plot_general_floxer_info(
-            self.benchmark_name,
-            &floxer_results,
+        let title = format!("General Info for {}", self.benchmark_name);
+        plots::plot_histogram_data_in_grid(
+            floxer_results.iter().map(|res| {
+                [
+                    &res.stats.query_lengths,
+                    &res.stats.alignments_per_query,
+                    &res.stats.alignments_edit_distance,
+                ]
+            }),
+            &title,
+            instance_names,
+            [
+                "Query lenghts",
+                "Alignments per query",
+                "Edit distances of alignments",
+            ],
             &benchmark_folder,
             &suite_config.output_folder,
         );
+
         plots::plot_resource_metrics(
             self.benchmark_name,
             floxer_results

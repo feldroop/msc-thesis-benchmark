@@ -1,15 +1,21 @@
 use std::{fs, path::Path};
 
 use crate::{
-    floxer::{FloxerResult, HistogramData, ResourceMetrics},
+    floxer::{HistogramData, ResourceMetrics},
     folder_structure::BenchmarkFolder,
 };
 
 use charming::{
     component::{Axis, Grid, Legend, Title},
+    element::TextStyle,
     series::Bar,
     Chart, ImageRenderer,
 };
+
+static TITLE_FONT_SIZE: u8 = 25;
+static SUBTITLE_FONT_SIZE: u8 = 20;
+static LABEL_FONT_SIZE: u8 = 15;
+static GRID_OUTERMOST_OFFSET: usize = 6;
 
 pub fn plot_resource_metrics<'a>(
     benchmark_name: &str,
@@ -73,94 +79,176 @@ pub fn plot_resource_metrics<'a>(
     );
 }
 
-pub fn plot_general_floxer_info(
-    benchmark_name: &str,
-    floxer_results: &[FloxerResult],
+pub fn plot_histogram_data_in_grid<'a, I, S1, S2>(
+    iter: impl IntoIterator<Item = I>,
+    title: &str,
+    instance_names: impl IntoIterator<Item = S1>,
+    metric_names: impl IntoIterator<Item = S2>,
     benchmark_folder: &BenchmarkFolder,
     root_output_folder: &Path,
-) {
-    let big_offset_str = "70%";
-    let small_offset_str = "35%";
+) where
+    I: IntoIterator<Item = &'a HistogramData>,
+    S1: AsRef<str>,
+    S2: AsRef<str>,
+{
+    // runs should be columns, metrics are rows
+    let runs: Vec<Vec<&HistogramData>> = iter
+        .into_iter()
+        .map(|run| run.into_iter().collect())
+        .collect();
+
+    let num_columns = runs.len();
+    let num_rows = runs.first().expect("at least one run to plot").len();
+
+    let available_column_space = 105f64;
+    let available_row_space = 90f64;
+    let column_width = available_column_space / num_columns as f64;
+    let row_width = available_row_space / num_rows as f64;
+
+    let subtitle_top_offset_percentage = 4;
+    let grid_extra_top_offset_percentage = 3 * subtitle_top_offset_percentage; // to make space for the subtitles
+
+    let instance_names: Vec<_> = instance_names
+        .into_iter()
+        .map(|s| s.as_ref().to_string())
+        .collect();
+
+    let metric_names: Vec<_> = metric_names
+        .into_iter()
+        .map(|s| s.as_ref().to_string())
+        .collect();
 
     let mut chart = Chart::new()
-        .title(Title::new().text(format!("General info For {}", benchmark_name)))
-        .legend(Legend::new().right("10%").left("40%"))
+        .title(
+            Title::new()
+                .text(title)
+                .left("center")
+                .text_style(TextStyle::new().font_size(TITLE_FONT_SIZE)),
+        )
+        .legend(
+            Legend::new()
+                .right("right")
+                .text_style(TextStyle::new().font_size(SUBTITLE_FONT_SIZE))
+                .top("top"),
+        )
         .background_color("white");
 
-    // we calculate with 110%, because the values are offsets and the extra 10% adds a margin
-    let column_width = 110f64 / floxer_results.len() as f64;
-    for (base_index, floxer_result) in floxer_results.iter().enumerate() {
-        let left_offset_str = format!("{}%", (base_index as f64 * column_width) as usize);
+    for (column_index, metrics) in runs.iter().enumerate() {
+        let column_index: usize = column_index; // fix rust-analyzer false-positive error
+
+        let left_offset_str = format!("{}%", (column_index as f64 * column_width) as usize);
         let right_offset_str = format!(
             "{}%",
-            ((floxer_results.len() - 1 - base_index) as f64 * column_width) as usize
+            ((num_columns - 1 - column_index) as f64 * column_width) as usize
         );
 
-        chart = chart
-            .grid(add_horizontal_position_to_grid(
-                Grid::new().bottom(big_offset_str),
+        chart = chart.title(create_title_with_offsets(
+            &instance_names[column_index],
+            &left_offset_str,
+            &format!("{subtitle_top_offset_percentage}%"),
+        ));
+
+        for (row_index, histogram) in metrics.iter().enumerate() {
+            let row_index: usize = row_index; // fix rust-analyzer false-positive error
+
+            let top_offset_str = format!(
+                "{}%",
+                grid_extra_top_offset_percentage + (row_index as f64 * row_width) as usize
+            );
+            let bottom_offset_str = format!(
+                "{}%",
+                GRID_OUTERMOST_OFFSET + ((num_rows - 1 - row_index) as f64 * row_width) as usize
+            );
+
+            chart = chart.grid(create_grid_with_offsets(
                 &left_offset_str,
                 &right_offset_str,
-            ))
-            .grid(add_horizontal_position_to_grid(
-                Grid::new().bottom(small_offset_str).top(small_offset_str),
-                &left_offset_str,
-                &right_offset_str,
-            ))
-            .grid(add_horizontal_position_to_grid(
-                Grid::new().top(big_offset_str),
-                &left_offset_str,
-                &right_offset_str,
+                &top_offset_str,
+                &bottom_offset_str,
             ));
 
-        let base_index = base_index as i32;
-        chart = add_histogram_to_chart(
-            chart,
-            &floxer_result.stats.query_lengths,
-            "Query lengths",
-            base_index * 3,
-        );
-        chart = add_histogram_to_chart(
-            chart,
-            &floxer_result.stats.alignments_per_query,
-            "Alignments Per Query",
-            base_index * 3 + 1,
-        );
-        chart = add_histogram_to_chart(
-            chart,
-            &floxer_result.stats.alignments_edit_distance,
-            "Alignments Edit Distance",
-            base_index * 3 + 2,
-        );
+            let index = num_rows * column_index + row_index;
+            chart = add_histogram_data_to_chart(
+                chart,
+                histogram,
+                &metric_names[row_index],
+                index as i32,
+            );
+        }
     }
+
+    let plot_name_for_file = title.to_ascii_lowercase().replace(' ', "_");
 
     save_chart(
         chart,
-        format!("{benchmark_name}_general_info"),
-        600 * floxer_results.len() as u32,
-        1200,
+        plot_name_for_file,
+        600 * num_columns as u32,
+        400 * num_rows as u32,
         benchmark_folder,
         root_output_folder,
     );
 }
 
-fn add_horizontal_position_to_grid(
-    mut grid: Grid,
+fn create_grid_with_offsets(
     left_offset_str: &str,
     right_offset_str: &str,
+    top_offset_str: &str,
+    bottom_offset_str: &str,
 ) -> Grid {
-    if left_offset_str != "0%" {
-        grid = grid.left(left_offset_str);
-    }
+    let default_offset_str = format!("{GRID_OUTERMOST_OFFSET}%");
+    let mut grid = Grid::new();
 
-    if right_offset_str != "0%" {
-        grid = grid.right(right_offset_str);
-    }
+    // setting the offsets to 0% somehow destroys the layout
+    grid = grid.left(if left_offset_str != "0%" {
+        left_offset_str
+    } else {
+        &default_offset_str
+    });
+
+    grid = grid.right(if right_offset_str != "0%" {
+        right_offset_str
+    } else {
+        &default_offset_str
+    });
+
+    grid = grid.top(if top_offset_str != "0%" {
+        top_offset_str
+    } else {
+        &default_offset_str
+    });
+
+    grid = grid.bottom(if bottom_offset_str != "0%" {
+        bottom_offset_str
+    } else {
+        &default_offset_str
+    });
 
     grid
 }
 
-fn add_histogram_to_chart(
+fn create_title_with_offsets(text: &str, left_offset_str: &str, top_offset_str: &str) -> Title {
+    let default_offset_str = "3%";
+    let mut title = Title::new()
+        .text(text)
+        .text_style(TextStyle::new().font_size(SUBTITLE_FONT_SIZE));
+
+    // setting the offsets to 0% somehow destroys the layout
+    title = title.left(if left_offset_str != "0%" {
+        left_offset_str
+    } else {
+        default_offset_str
+    });
+
+    title = title.top(if top_offset_str != "0%" {
+        top_offset_str
+    } else {
+        default_offset_str
+    });
+
+    title
+}
+
+fn add_histogram_data_to_chart(
     chart: Chart,
     histogram: &HistogramData,
     name: &str,
@@ -168,11 +256,16 @@ fn add_histogram_to_chart(
 ) -> Chart {
     chart
         .x_axis(Axis::new().data(histogram.axis_names()).grid_index(index))
-        .y_axis(Axis::new().name("Occurrences").grid_index(index))
+        .y_axis(
+            Axis::new()
+                .name(format!("Occurrences (total: {})", histogram.num_values))
+                .grid_index(index)
+                .name_text_style(TextStyle::new().font_size(LABEL_FONT_SIZE)),
+        )
         .series(
             Bar::new()
                 .data(histogram.occurrences_as_i32())
-                .name(format!("{name} (total: {})", histogram.num_values))
+                .name(name)
                 .x_axis_index(index)
                 .y_axis_index(index),
         )
