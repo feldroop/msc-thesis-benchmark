@@ -1,6 +1,8 @@
-use crate::{config::BenchmarkSuiteConfig, folder_structure::BenchmarkFolder};
+use crate::{
+    benchmarks::ProfileConfig, config::BenchmarkSuiteConfig, folder_structure::BenchmarkFolder,
+};
 
-use std::{fs, process::Command};
+use std::{fs, path::Path, process::Command};
 
 use anyhow::{bail, Result};
 use serde::Deserialize;
@@ -12,7 +14,9 @@ system_cpu_seconds = %S
 peak_memory_kilobytes = %M
 average_memory_kilobytes = %K";
 
+#[derive(Debug, Default, Copy, Clone)]
 pub enum Reference {
+    #[default]
     HumanGenomeHg38,
 }
 
@@ -23,15 +27,20 @@ impl Reference {
         }
     }
 }
+
+#[derive(Debug, Default, Copy, Clone)]
 pub enum Queries {
+    #[default]
     HumanWgsNanopore,
 }
 
+#[derive(Debug, Copy, Clone)]
 pub enum IndexStrategy {
     AlwaysRebuild,
     ReadFromDiskIfStored,
 }
 
+#[derive(Debug, Copy, Clone)]
 pub enum QueryErrors {
     Exact(u16),
     Rate(f64),
@@ -67,6 +76,7 @@ pub enum VerificationAlgorithm {
     Hierarchical,
 }
 
+#[derive(Debug)]
 pub struct FloxerAlgorithmConfig {
     pub index_strategy: IndexStrategy,
     pub query_errors: QueryErrors,
@@ -99,20 +109,12 @@ impl Default for FloxerAlgorithmConfig {
 
 // API to configure a floxer benchmark run.
 // the output path will be determined from the other parameters
+#[derive(Debug, Default)]
 pub struct FloxerConfig {
+    pub name: Option<String>,
     pub reference: Reference,
     pub queries: Queries,
     pub algorithm_config: FloxerAlgorithmConfig,
-}
-
-impl Default for FloxerConfig {
-    fn default() -> Self {
-        Self {
-            reference: Reference::HumanGenomeHg38,
-            queries: Queries::HumanWgsNanopore,
-            algorithm_config: Default::default(),
-        }
-    }
 }
 
 impl FloxerConfig {
@@ -121,12 +123,12 @@ impl FloxerConfig {
         &self,
         benchmark_folder: &BenchmarkFolder,
         benchmark_name: &str,
-        instance_name: Option<&str>,
         suite_config: &BenchmarkSuiteConfig,
+        profile_config: ProfileConfig,
     ) -> Result<FloxerResult> {
         let mut output_folder = benchmark_folder.get().to_path_buf();
 
-        if let Some(instance_name) = instance_name {
+        if let Some(instance_name) = &self.name {
             output_folder.push(instance_name);
         }
 
@@ -146,7 +148,24 @@ impl FloxerConfig {
         let mut stats_path = output_folder.clone();
         stats_path.push("stats.toml");
 
-        let mut command = Command::new("/usr/bin/time");
+        let mut perf_data_path = output_folder.clone();
+        perf_data_path.push("perf.data");
+
+        let mut command = match profile_config {
+            ProfileConfig::Off => Command::new("/usr/bin/time"),
+            ProfileConfig::On => {
+                let mut command = Command::new("perf");
+                command
+                    .arg("record")
+                    .arg("-o")
+                    .arg(&perf_data_path)
+                    .arg("-F")
+                    .arg("100")
+                    .arg("--")
+                    .arg("/usr/bin/time");
+                command
+            }
+        };
 
         command
             .arg("--output")
@@ -222,7 +241,7 @@ impl FloxerConfig {
         println!(
             "- Running the benchmark: {}{}",
             benchmark_name,
-            if let Some(instance_name) = instance_name {
+            if let Some(instance_name) = &self.name {
                 format!(" - {instance_name}")
             } else {
                 String::new()
@@ -230,11 +249,20 @@ impl FloxerConfig {
         );
         let floxer_proc_output = command.output()?;
 
-        if !floxer_proc_output.status.success() || !floxer_proc_output.stdout.is_empty() {
+        if !floxer_proc_output.status.success()
+            || (!floxer_proc_output.stdout.is_empty() && profile_config == ProfileConfig::Off)
+        {
             bail!(
                 "Something went wrong. Floxer process output: {:?}",
                 floxer_proc_output
             );
+        }
+
+        let mut profile_path = output_folder.clone();
+        profile_path.push("samply_profile.json");
+
+        if let ProfileConfig::On = profile_config {
+            create_profile(&perf_data_path, &profile_path, "floxer_profile")?;
         }
 
         let stats_file_str = fs::read_to_string(stats_path)?;
@@ -244,12 +272,52 @@ impl FloxerConfig {
         let resource_metrics: ResourceMetrics = toml::from_str(&timings_file_str)?;
 
         Ok(FloxerResult {
-            benchmark_instance_name: instance_name
-                .map_or_else(|| String::from("floxer"), |name| name.to_owned()),
+            benchmark_instance_name: self.name.clone().unwrap_or_else(|| String::from("floxer")),
             stats,
             resource_metrics,
         })
     }
+}
+
+fn create_profile(perf_data_path: &Path, profile_path: &Path, profile_name: &str) -> Result<()> {
+    let samply_output = Command::new("samply")
+        .arg("import")
+        .arg("--profile-name")
+        .arg(profile_name)
+        .arg("--save-only")
+        .arg("--output")
+        .arg(profile_path)
+        .arg("--no-open")
+        .arg(perf_data_path)
+        .output()?;
+
+    if !samply_output.status.success() {
+        bail!(
+            "Samply import failed with the following output: {:?}",
+            samply_output
+        )
+    }
+
+    let mut flamegraph_path = profile_path.to_owned();
+    flamegraph_path.set_file_name("flamegraph");
+    flamegraph_path.set_extension("svg");
+
+    let flamegraph_output = Command::new("flamegraph")
+        .arg("--deterministic")
+        .arg("--perfdata")
+        .arg(perf_data_path)
+        .arg("--output")
+        .arg(flamegraph_path)
+        .output()?;
+
+    if !flamegraph_output.status.success() {
+        bail!(
+            "flamegraph generation failed with the following output: {:?}",
+            flamegraph_output
+        )
+    }
+
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -274,7 +342,6 @@ pub struct FloxerStats {
 
 #[derive(Debug, Deserialize)]
 pub struct SeedStats {
-    pub completely_excluded_queries: usize,
     pub seed_lengths: HistogramData,
     pub errors_per_seed: HistogramData,
     pub seeds_per_query: HistogramData,
@@ -282,6 +349,7 @@ pub struct SeedStats {
 
 #[derive(Debug, Deserialize)]
 pub struct AnchorStats {
+    pub completely_excluded_queries: usize,
     pub anchors_per_non_excluded_seed: HistogramData,
     pub kept_anchors_per_partly_excluded_seed: HistogramData,
     pub raw_anchors_per_fully_excluded_seed: HistogramData,
