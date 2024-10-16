@@ -102,7 +102,7 @@ impl Default for FloxerAlgorithmConfig {
             interval_optimization: IntervalOptimization::On,
             extra_verification_ratio: 0.02,
             verification_algorithm: VerificationAlgorithm::Hierarchical,
-            num_threads: 8,
+            num_threads: 64,
         }
     }
 }
