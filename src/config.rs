@@ -16,7 +16,6 @@ pub struct BenchmarkSuiteConfig {
 pub struct ReadmapperBinaries {
     pub floxer: PathBuf,
     pub minimap: PathBuf,
-    pub ngmlr: PathBuf,
 }
 
 #[derive(Deserialize)]
