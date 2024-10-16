@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::config::BenchmarkSuiteConfig;
 use crate::floxer::{
-    AnchorGroupOrder, FloxerAlgorithmConfig, FloxerConfig, FloxerResult, IntervalOptimization,
+    AnchorGroupOrder, FloxerAlgorithmConfig, FloxerConfig, FloxerRunResult, IntervalOptimization,
     PexTreeConstruction, QueryErrors, VerificationAlgorithm,
 };
 use crate::folder_structure::BenchmarkFolder;
@@ -76,28 +76,103 @@ pub fn run_all(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
 struct BenchmarkResult {
     benchmark_name: String,
     folder: BenchmarkFolder,
-    floxer_results: Vec<FloxerResult>,
+    floxer_results: Vec<FloxerRunResult>,
+}
+
+impl BenchmarkResult {
+    pub fn plot_seed_stats(&self, suite_config: &BenchmarkSuiteConfig) {
+        plots::plot_histogram_data_in_grid(
+            self.floxer_results
+                .iter()
+                .map(|run| run.stats.seed_stats.iter_histograms()),
+            &format!("{} seed stats", self.benchmark_name),
+            self.floxer_results
+                .iter()
+                .map(|run| &run.benchmark_instance_name),
+            self.floxer_results[0].stats.seed_stats.iter_metric_names(),
+            &self.folder,
+            &suite_config.output_folder,
+        );
+    }
+
+    pub fn plot_anchor_stats(&self, suite_config: &BenchmarkSuiteConfig) {
+        plots::plot_histogram_data_in_grid(
+            self.floxer_results
+                .iter()
+                .map(|run| run.stats.anchor_stats.iter_histograms()),
+            &format!("{} anchor stats", self.benchmark_name),
+            self.floxer_results.iter().map(|run| {
+                format!(
+                    "{} (#fully exc. query: {})",
+                    run.benchmark_instance_name, run.stats.anchor_stats.completely_excluded_queries
+                )
+            }),
+            self.floxer_results[0]
+                .stats
+                .anchor_stats
+                .iter_metric_names(),
+            &self.folder,
+            &suite_config.output_folder,
+        );
+    }
+
+    pub fn plot_alignment_stats(&self, suite_config: &BenchmarkSuiteConfig) {
+        plots::plot_histogram_data_in_grid(
+            self.floxer_results
+                .iter()
+                .map(|run| run.stats.alignment_stats.iter_histograms()),
+            &format!("{} alignment stats", self.benchmark_name),
+            self.floxer_results
+                .iter()
+                .map(|run| &run.benchmark_instance_name),
+            self.floxer_results[0]
+                .stats
+                .alignment_stats
+                .iter_metric_names(),
+            &self.folder,
+            &suite_config.output_folder,
+        );
+    }
+
+    pub fn plot_general_stats(&self, suite_config: &BenchmarkSuiteConfig) {
+        plots::plot_histogram_data_in_grid(
+            self.floxer_results
+                .iter()
+                .map(|run| run.stats.iter_general_stats_histograms()),
+            &format!("{} general stats", self.benchmark_name),
+            self.floxer_results
+                .iter()
+                .map(|run| &run.benchmark_instance_name),
+            self.floxer_results[0].stats.iter_general_metric_names(),
+            &self.folder,
+            &suite_config.output_folder,
+        );
+    }
 }
 
 fn anchor_group_order(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    FloxerParameterBenchmark::from_iter(AnchorGroupOrder::iter().map(|anchor_group_order| {
-        FloxerConfig {
-            algorithm_config: FloxerAlgorithmConfig {
-                anchor_group_order,
+    let res =
+        FloxerParameterBenchmark::from_iter(AnchorGroupOrder::iter().map(|anchor_group_order| {
+            FloxerConfig {
+                algorithm_config: FloxerAlgorithmConfig {
+                    anchor_group_order,
+                    ..Default::default()
+                },
+                name: Some(anchor_group_order.to_string()),
                 ..Default::default()
-            },
-            name: Some(anchor_group_order.to_string()),
-            ..Default::default()
-        }
-    }))
-    .name("anchor_group_order")
-    .run(suite_config)
-    .map(|_| ())
+            }
+        }))
+        .name("anchor_group_order")
+        .run(suite_config)?;
+
+    res.plot_anchor_stats(suite_config);
+
+    Ok(())
 }
 
 fn debug_benchmark(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    FloxerParameterBenchmark::from_iter(PexTreeConstruction::iter().map(|pex_tree_construction| {
-        FloxerConfig {
+    let _ = FloxerParameterBenchmark::from_iter(PexTreeConstruction::iter().map(
+        |pex_tree_construction| FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
                 pex_tree_construction,
                 extra_verification_ratio: 2.0,
@@ -108,39 +183,44 @@ fn debug_benchmark(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
             },
             name: Some(pex_tree_construction.to_string()),
             ..Default::default()
-        }
-    }))
+        },
+    ))
     .name("debug")
-    .run(suite_config)
-    .map(|_| ())
+    .run(suite_config);
+
+    Ok(())
 }
 
 fn profile(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    FloxerParameterBenchmark::from_iter([Default::default()])
+    let _ = FloxerParameterBenchmark::from_iter([Default::default()])
         .name("profile")
         .with_profile()
-        .run(suite_config)
-        .map(|_| ())
+        .run(suite_config);
+
+    Ok(())
 }
 
 fn interval_optimization(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    FloxerParameterBenchmark::from_iter(IntervalOptimization::iter().map(|interval_optimization| {
-        FloxerConfig {
+    let res = FloxerParameterBenchmark::from_iter(IntervalOptimization::iter().map(
+        |interval_optimization| FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
                 interval_optimization,
                 ..Default::default()
             },
             name: Some(interval_optimization.to_string()),
             ..Default::default()
-        }
-    }))
+        },
+    ))
     .name("interval_optimization")
-    .run(suite_config)
-    .map(|_| ())
+    .run(suite_config)?;
+
+    res.plot_alignment_stats(suite_config);
+
+    Ok(())
 }
 
 fn pex_seed_errors(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    FloxerParameterBenchmark::from_iter((0..4).map(|pex_seed_errors| FloxerConfig {
+    let res = FloxerParameterBenchmark::from_iter((0..4).map(|pex_seed_errors| FloxerConfig {
         algorithm_config: FloxerAlgorithmConfig {
             pex_seed_errors,
             ..Default::default()
@@ -149,28 +229,36 @@ fn pex_seed_errors(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
         ..Default::default()
     }))
     .name("pex_seed_errors")
-    .run(suite_config)
-    .map(|_| ())
+    .run(suite_config)?;
+
+    res.plot_seed_stats(suite_config);
+    res.plot_anchor_stats(suite_config);
+
+    Ok(())
 }
 
 fn pex_tree_building(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    FloxerParameterBenchmark::from_iter(PexTreeConstruction::iter().map(|pex_tree_construction| {
-        FloxerConfig {
+    let res = FloxerParameterBenchmark::from_iter(PexTreeConstruction::iter().map(
+        |pex_tree_construction| FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
                 pex_tree_construction,
                 ..Default::default()
             },
             name: Some(pex_tree_construction.to_string()),
             ..Default::default()
-        }
-    }))
+        },
+    ))
     .name("pex_tree_building")
-    .run(suite_config)
-    .map(|_| ())
+    .run(suite_config)?;
+
+    res.plot_seed_stats(suite_config);
+    res.plot_anchor_stats(suite_config);
+
+    Ok(())
 }
 
 fn query_error_rate(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    FloxerParameterBenchmark::from_iter([0.03, 0.05, 0.07, 0.09].into_iter().map(
+    let res = FloxerParameterBenchmark::from_iter([0.03, 0.05, 0.07, 0.09].into_iter().map(
         |query_error_ratio| FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
                 query_errors: QueryErrors::Rate(query_error_ratio),
@@ -181,12 +269,16 @@ fn query_error_rate(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
         },
     ))
     .name("query_error_rate")
-    .run(suite_config)
-    .map(|_| ())
+    .run(suite_config)?;
+
+    res.plot_seed_stats(suite_config);
+    res.plot_anchor_stats(suite_config);
+
+    Ok(())
 }
 
 fn verification_algorithm(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    FloxerParameterBenchmark::from_iter(VerificationAlgorithm::iter().map(
+    let res = FloxerParameterBenchmark::from_iter(VerificationAlgorithm::iter().map(
         |verification_algorithm| FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
                 verification_algorithm,
@@ -197,8 +289,11 @@ fn verification_algorithm(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
         },
     ))
     .name("verification_algorithm")
-    .run(suite_config)
-    .map(|_| ())
+    .run(suite_config)?;
+
+    res.plot_alignment_stats(suite_config);
+
+    Ok(())
 }
 
 #[derive(Default)]
@@ -256,26 +351,6 @@ impl FloxerParameterBenchmark {
             );
         }
 
-        let title = format!("General Info for {}", self.benchmark_name);
-        plots::plot_histogram_data_in_grid(
-            floxer_results.iter().map(|res| {
-                [
-                    &res.stats.query_lengths,
-                    &res.stats.alignments_per_query,
-                    &res.stats.alignments_edit_distance,
-                ]
-            }),
-            &title,
-            instance_names,
-            [
-                "Query lenghts",
-                "Alignments per query",
-                "Edit distances of alignments",
-            ],
-            &benchmark_folder,
-            &suite_config.output_folder,
-        );
-
         plots::plot_resource_metrics(
             &self.benchmark_name,
             floxer_results
@@ -285,10 +360,14 @@ impl FloxerParameterBenchmark {
             &suite_config.output_folder,
         );
 
-        Ok(BenchmarkResult {
+        let res = BenchmarkResult {
             benchmark_name: self.benchmark_name.to_owned(),
             folder: benchmark_folder,
             floxer_results,
-        })
+        };
+
+        res.plot_general_stats(suite_config);
+
+        Ok(res)
     }
 }

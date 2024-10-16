@@ -125,7 +125,7 @@ impl FloxerConfig {
         benchmark_name: &str,
         suite_config: &BenchmarkSuiteConfig,
         profile_config: ProfileConfig,
-    ) -> Result<FloxerResult> {
+    ) -> Result<FloxerRunResult> {
         let mut output_folder = benchmark_folder.get().to_path_buf();
 
         if let Some(instance_name) = &self.name {
@@ -271,7 +271,7 @@ impl FloxerConfig {
         let timings_file_str = fs::read_to_string(timing_path)?;
         let resource_metrics: ResourceMetrics = toml::from_str(&timings_file_str)?;
 
-        Ok(FloxerResult {
+        Ok(FloxerRunResult {
             benchmark_instance_name: self.name.clone().unwrap_or_else(|| String::from("floxer")),
             stats,
             resource_metrics,
@@ -321,7 +321,7 @@ fn create_profile(perf_data_path: &Path, profile_path: &Path, profile_name: &str
 }
 
 #[derive(Debug)]
-pub struct FloxerResult {
+pub struct FloxerRunResult {
     pub benchmark_instance_name: String,
     pub stats: FloxerStats,
     pub resource_metrics: ResourceMetrics,
@@ -340,11 +340,46 @@ pub struct FloxerStats {
     pub alignments_edit_distance: HistogramData,
 }
 
+impl FloxerStats {
+    pub fn iter_general_stats_histograms(&self) -> impl Iterator<Item = &HistogramData> {
+        [
+            &self.query_lengths,
+            &self.alignments_per_query,
+            &self.alignments_edit_distance,
+        ]
+        .into_iter()
+    }
+
+    pub fn iter_general_metric_names(&self) -> impl Iterator<Item = &'static str> {
+        [
+            "Query lenghts",
+            "Alignments per query",
+            "Edit distances of alignments",
+        ]
+        .into_iter()
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct SeedStats {
     pub seed_lengths: HistogramData,
     pub errors_per_seed: HistogramData,
     pub seeds_per_query: HistogramData,
+}
+
+impl SeedStats {
+    pub fn iter_histograms(&self) -> impl Iterator<Item = &HistogramData> {
+        [
+            &self.seed_lengths,
+            &self.errors_per_seed,
+            &self.seeds_per_query,
+        ]
+        .into_iter()
+    }
+
+    pub fn iter_metric_names(&self) -> impl Iterator<Item = &'static str> {
+        ["Seed lengts", "Errors per seed", "Seeds per query"].into_iter()
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -357,12 +392,58 @@ pub struct AnchorStats {
     pub excluded_raw_anchors_per_query: HistogramData,
 }
 
+impl AnchorStats {
+    pub fn iter_histograms(&self) -> impl Iterator<Item = &HistogramData> {
+        [
+            &self.anchors_per_non_excluded_seed,
+            &self.kept_anchors_per_partly_excluded_seed,
+            &self.raw_anchors_per_fully_excluded_seed,
+            &self.anchors_per_query_from_non_excluded_seeds,
+            &self.excluded_raw_anchors_per_query,
+        ]
+        .into_iter()
+    }
+
+    pub fn iter_metric_names(&self) -> impl Iterator<Item = &'static str> {
+        [
+            "Anchors per non excluded seed",
+            "Kept anchors per partly excluded seed",
+            "Raw anchors per fully excluded seed",
+            "Anchors per query from non excluded seeds",
+            "Excluded raw anchors per query",
+        ]
+        .into_iter()
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct AlignmentStats {
     pub reference_span_sizes_aligned_of_inner_nodes: HistogramData,
     pub reference_span_sizes_alignment_avoided_of_inner_nodes: HistogramData,
     pub reference_span_sizes_aligned_of_roots: HistogramData,
     pub reference_span_sizes_alignment_avoided_of_roots: HistogramData,
+}
+
+impl AlignmentStats {
+    pub fn iter_histograms(&self) -> impl Iterator<Item = &HistogramData> {
+        [
+            &self.reference_span_sizes_aligned_of_inner_nodes,
+            &self.reference_span_sizes_alignment_avoided_of_inner_nodes,
+            &self.reference_span_sizes_aligned_of_roots,
+            &self.reference_span_sizes_alignment_avoided_of_roots,
+        ]
+        .into_iter()
+    }
+
+    pub fn iter_metric_names(&self) -> impl Iterator<Item = &'static str> {
+        [
+            "Ref span sizes aligned inner",
+            "Ref span sizes alignment avoided inner",
+            "Ref span sizes aligned roots",
+            "Ref span sizes alignment avoided roots",
+        ]
+        .into_iter()
+    }
 }
 
 #[derive(Debug, Deserialize)]

@@ -254,13 +254,28 @@ fn add_histogram_data_to_chart(
     name: &str,
     index: i32,
 ) -> Chart {
+    let x_axis_name = if let Some(descriptive_stats) = &histogram.descriptive_stats {
+        format!(
+            "min: {}, mean: {}, max: {}",
+            descriptive_stats.min_value, descriptive_stats.mean, descriptive_stats.max_value
+        )
+    } else {
+        String::new()
+    };
+
     chart
-        .x_axis(Axis::new().data(histogram.axis_names()).grid_index(index))
+        .x_axis(
+            Axis::new()
+                .data(histogram.axis_names())
+                .name(x_axis_name)
+                .name_text_style(TextStyle::new().font_size(LABEL_FONT_SIZE))
+                .grid_index(index),
+        )
         .y_axis(
             Axis::new()
                 .name(format!("Occurrences (total: {})", histogram.num_values))
-                .grid_index(index)
-                .name_text_style(TextStyle::new().font_size(LABEL_FONT_SIZE)),
+                .name_text_style(TextStyle::new().font_size(LABEL_FONT_SIZE))
+                .grid_index(index),
         )
         .series(
             Bar::new()
