@@ -317,7 +317,7 @@ fn create_profile(
 
     let mut all_plots_profile_path = suite_config.all_plots_folder();
     all_plots_profile_path.set_file_name(profile_path.file_name().unwrap());
-    std::fs::copy(profile_path, all_plots_profile_path);
+    std::fs::copy(profile_path, all_plots_profile_path)?;
 
     let mut flamegraph_path = profile_path.to_owned();
     flamegraph_path.set_file_name("flamegraph");
@@ -340,7 +340,7 @@ fn create_profile(
 
     let mut all_plots_flamegraph_path = suite_config.all_plots_folder();
     all_plots_flamegraph_path.set_file_name(flamegraph_path.file_name().unwrap());
-    std::fs::copy(profile_path, all_plots_flamegraph_path);
+    std::fs::copy(profile_path, all_plots_flamegraph_path)?;
 
     Ok(())
 }
