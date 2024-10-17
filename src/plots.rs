@@ -7,7 +7,7 @@ use crate::{
 
 use charming::{
     component::{Axis, Grid, Legend, Title},
-    element::TextStyle,
+    element::{NameLocation, TextStyle},
     series::Bar,
     Chart, ImageRenderer,
 };
@@ -269,6 +269,8 @@ fn add_histogram_data_to_chart(
                 .data(histogram.axis_names())
                 .name(x_axis_name)
                 .name_text_style(TextStyle::new().font_size(LABEL_FONT_SIZE))
+                .name_location(NameLocation::Middle)
+                .name_gap(25)
                 .grid_index(index),
         )
         .y_axis(
