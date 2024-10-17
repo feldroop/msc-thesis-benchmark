@@ -1,6 +1,7 @@
-use std::{fs, path::Path};
+use std::fs;
 
 use crate::{
+    config::BenchmarkSuiteConfig,
     floxer::{HistogramData, ResourceMetrics},
     folder_structure::BenchmarkFolder,
 };
@@ -21,7 +22,7 @@ pub fn plot_resource_metrics<'a>(
     benchmark_name: &str,
     metrics_and_names_of_runs: impl Iterator<Item = (&'a ResourceMetrics, &'a str)>,
     benchmark_folder: &BenchmarkFolder,
-    root_output_folder: &Path,
+    suite_config: &BenchmarkSuiteConfig,
 ) {
     let offset_str = "54%";
 
@@ -75,7 +76,7 @@ pub fn plot_resource_metrics<'a>(
         1200,
         800,
         benchmark_folder,
-        root_output_folder,
+        suite_config,
     );
 }
 
@@ -85,7 +86,7 @@ pub fn plot_histogram_data_in_grid<'a, I, S1, S2>(
     instance_names: impl IntoIterator<Item = S1>,
     metric_names: impl IntoIterator<Item = S2>,
     benchmark_folder: &BenchmarkFolder,
-    root_output_folder: &Path,
+    suite_config: &BenchmarkSuiteConfig,
 ) where
     I: IntoIterator<Item = &'a HistogramData>,
     S1: AsRef<str>,
@@ -185,7 +186,7 @@ pub fn plot_histogram_data_in_grid<'a, I, S1, S2>(
         600 * num_columns as u32,
         400 * num_rows as u32,
         benchmark_folder,
-        root_output_folder,
+        suite_config,
     );
 }
 
@@ -294,7 +295,7 @@ fn save_chart(
     width: u32,
     height: u32,
     benchmark_folder: &BenchmarkFolder,
-    root_output_folder: &Path,
+    suite_config: &BenchmarkSuiteConfig,
 ) {
     let mut renderer = ImageRenderer::new(width, height);
 
@@ -309,7 +310,7 @@ fn save_chart(
         .save(&chart, in_benchmark_folder)
         .expect("failed to save a plot to benchmark folder");
 
-    let mut in_all_plots_folder = crate::folder_structure::all_plots_folder(root_output_folder);
+    let mut in_all_plots_folder = suite_config.all_plots_folder();
     in_all_plots_folder.push(plot_name);
     in_all_plots_folder.set_extension("svg");
     renderer

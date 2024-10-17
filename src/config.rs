@@ -1,5 +1,6 @@
+use anyhow::Result;
 use serde::Deserialize;
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 // config that is read from a file.
 // these are parameters of this program that don't change for every benchmark
@@ -27,5 +28,34 @@ pub struct ReferencePaths {
 #[derive(Deserialize)]
 pub struct QueryPaths {
     pub human_wgs_nanopore: PathBuf,
+    pub human_wgs_nanopore_small: PathBuf,
     pub debug: PathBuf,
+}
+
+impl BenchmarkSuiteConfig {
+    pub fn all_plots_folder(&self) -> PathBuf {
+        let mut base_output_folder = self.output_folder.clone();
+        base_output_folder.push("all_plots");
+        base_output_folder
+    }
+
+    pub fn index_folder(&self) -> PathBuf {
+        let mut base_output_folder = self.output_folder.clone();
+        base_output_folder.push("indices");
+        base_output_folder
+    }
+
+    pub fn setup(&self) -> Result<()> {
+        let index_folder = self.index_folder();
+        if !index_folder.exists() {
+            fs::create_dir_all(index_folder)?;
+        }
+
+        let all_plots_dir = self.all_plots_folder();
+        if !all_plots_dir.exists() {
+            fs::create_dir_all(all_plots_dir)?;
+        }
+
+        Ok(())
+    }
 }

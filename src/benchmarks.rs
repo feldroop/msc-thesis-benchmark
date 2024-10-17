@@ -91,7 +91,7 @@ impl BenchmarkResult {
                 .map(|run| &run.benchmark_instance_name),
             self.floxer_results[0].stats.seed_stats.iter_metric_names(),
             &self.folder,
-            &suite_config.output_folder,
+            suite_config,
         );
     }
 
@@ -112,7 +112,7 @@ impl BenchmarkResult {
                 .anchor_stats
                 .iter_metric_names(),
             &self.folder,
-            &suite_config.output_folder,
+            suite_config,
         );
     }
 
@@ -130,7 +130,7 @@ impl BenchmarkResult {
                 .alignment_stats
                 .iter_metric_names(),
             &self.folder,
-            &suite_config.output_folder,
+            suite_config,
         );
     }
 
@@ -145,7 +145,7 @@ impl BenchmarkResult {
                 .map(|run| &run.benchmark_instance_name),
             self.floxer_results[0].stats.iter_general_metric_names(),
             &self.folder,
-            &suite_config.output_folder,
+            suite_config,
         );
     }
 }
@@ -204,6 +204,7 @@ fn profile(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
 fn interval_optimization(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
     let res = FloxerParameterBenchmark::from_iter(IntervalOptimization::iter().map(
         |interval_optimization| FloxerConfig {
+            queries: Queries::HumanWgsNanoporeSmall,
             algorithm_config: FloxerAlgorithmConfig {
                 interval_optimization,
                 ..Default::default()
@@ -281,6 +282,7 @@ fn query_error_rate(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
 fn verification_algorithm(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
     let res = FloxerParameterBenchmark::from_iter(VerificationAlgorithm::iter().map(
         |verification_algorithm| FloxerConfig {
+            queries: Queries::HumanWgsNanoporeSmall,
             algorithm_config: FloxerAlgorithmConfig {
                 verification_algorithm,
                 ..Default::default()
@@ -358,7 +360,7 @@ impl FloxerParameterBenchmark {
                 .iter()
                 .map(|res| (&res.resource_metrics, res.benchmark_instance_name.as_str())),
             &benchmark_folder,
-            &suite_config.output_folder,
+            suite_config,
         );
 
         let res = BenchmarkResult {

@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let config_file_str = fs::read_to_string(&args.config_file)?;
     let suite_config: BenchmarkSuiteConfig = toml::from_str(&config_file_str)?;
 
-    folder_structure::setup(&suite_config.output_folder)?;
+    suite_config.setup()?;
 
     if let Some(benchmarks) = args.benchmarks {
         benchmarks::run_benchmarks(benchmarks, &suite_config)?;

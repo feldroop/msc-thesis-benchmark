@@ -34,6 +34,7 @@ impl Reference {
 pub enum Queries {
     #[default]
     HumanWgsNanopore,
+    HumanWgsNanoporeSmall,
     Debug,
 }
 
@@ -183,6 +184,7 @@ impl FloxerConfig {
 
         let queries_path = match self.queries {
             Queries::HumanWgsNanopore => &suite_config.query_paths.human_wgs_nanopore,
+            Queries::HumanWgsNanoporeSmall => &suite_config.query_paths.human_wgs_nanopore_small,
             Queries::Debug => &suite_config.query_paths.debug,
         };
 
@@ -201,7 +203,7 @@ impl FloxerConfig {
             .arg(&stats_path);
 
         if let IndexStrategy::ReadFromDiskIfStored = self.algorithm_config.index_strategy {
-            let mut index_path = crate::folder_structure::index_folder(&suite_config.output_folder);
+            let mut index_path = suite_config.index_folder();
             let index_file_name = format!("floxer-index-{}.flxi", self.reference.name_for_files());
             index_path.push(index_file_name);
 
@@ -267,7 +269,12 @@ impl FloxerConfig {
         profile_path.push("samply_profile.json");
 
         if let ProfileConfig::On = profile_config {
-            create_profile(&perf_data_path, &profile_path, "floxer_profile")?;
+            create_profile(
+                &perf_data_path,
+                &profile_path,
+                "floxer_profile",
+                suite_config,
+            )?;
         }
 
         let stats_file_str = fs::read_to_string(stats_path)?;
@@ -284,7 +291,12 @@ impl FloxerConfig {
     }
 }
 
-fn create_profile(perf_data_path: &Path, profile_path: &Path, profile_name: &str) -> Result<()> {
+fn create_profile(
+    perf_data_path: &Path,
+    profile_path: &Path,
+    profile_name: &str,
+    suite_config: &BenchmarkSuiteConfig,
+) -> Result<()> {
     let samply_output = Command::new("samply")
         .arg("import")
         .arg("--profile-name")
@@ -303,6 +315,10 @@ fn create_profile(perf_data_path: &Path, profile_path: &Path, profile_name: &str
         )
     }
 
+    let mut all_plots_profile_path = suite_config.all_plots_folder();
+    all_plots_profile_path.set_file_name(profile_path.file_name().unwrap());
+    std::fs::copy(profile_path, all_plots_profile_path);
+
     let mut flamegraph_path = profile_path.to_owned();
     flamegraph_path.set_file_name("flamegraph");
     flamegraph_path.set_extension("svg");
@@ -312,7 +328,7 @@ fn create_profile(perf_data_path: &Path, profile_path: &Path, profile_name: &str
         .arg("--perfdata")
         .arg(perf_data_path)
         .arg("--output")
-        .arg(flamegraph_path)
+        .arg(&flamegraph_path)
         .output()?;
 
     if !flamegraph_output.status.success() {
@@ -321,6 +337,10 @@ fn create_profile(perf_data_path: &Path, profile_path: &Path, profile_name: &str
             flamegraph_output
         )
     }
+
+    let mut all_plots_flamegraph_path = suite_config.all_plots_folder();
+    all_plots_flamegraph_path.set_file_name(flamegraph_path.file_name().unwrap());
+    std::fs::copy(profile_path, all_plots_flamegraph_path);
 
     Ok(())
 }
