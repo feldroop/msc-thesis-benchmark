@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use crate::config::BenchmarkSuiteConfig;
 use crate::floxer::{
     AnchorGroupOrder, FloxerAlgorithmConfig, FloxerConfig, FloxerRunResult, IntervalOptimization,
-    PexTreeConstruction, QueryErrors, VerificationAlgorithm,
+    PexTreeConstruction, Queries, QueryErrors, Reference, VerificationAlgorithm,
 };
 use crate::folder_structure::BenchmarkFolder;
 use crate::plots;
@@ -173,6 +173,8 @@ fn anchor_group_order(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
 fn debug_benchmark(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
     let _ = FloxerParameterBenchmark::from_iter(PexTreeConstruction::iter().map(
         |pex_tree_construction| FloxerConfig {
+            reference: Reference::Debug,
+            queries: Queries::Debug,
             algorithm_config: FloxerAlgorithmConfig {
                 pex_tree_construction,
                 extra_verification_ratio: 2.0,
@@ -182,7 +184,6 @@ fn debug_benchmark(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
                 ..Default::default()
             },
             name: Some(pex_tree_construction.to_string()),
-            ..Default::default()
         },
     ))
     .name("debug")

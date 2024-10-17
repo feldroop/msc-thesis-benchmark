@@ -21,9 +21,11 @@ pub struct ReadmapperBinaries {
 #[derive(Deserialize)]
 pub struct ReferencePaths {
     pub human_genome_hg38: PathBuf,
+    pub debug: PathBuf,
 }
 
 #[derive(Deserialize)]
 pub struct QueryPaths {
     pub human_wgs_nanopore: PathBuf,
+    pub debug: PathBuf,
 }

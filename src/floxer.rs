@@ -18,12 +18,14 @@ average_memory_kilobytes = %K";
 pub enum Reference {
     #[default]
     HumanGenomeHg38,
+    Debug,
 }
 
 impl Reference {
     fn name_for_files(&self) -> &str {
         match self {
             Self::HumanGenomeHg38 => "human-genome-hg38",
+            Self::Debug => "debug",
         }
     }
 }
@@ -32,6 +34,7 @@ impl Reference {
 pub enum Queries {
     #[default]
     HumanWgsNanopore,
+    Debug,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -175,10 +178,12 @@ impl FloxerConfig {
 
         let reference_path = match self.reference {
             Reference::HumanGenomeHg38 => &suite_config.reference_paths.human_genome_hg38,
+            Reference::Debug => &suite_config.reference_paths.debug,
         };
 
         let queries_path = match self.queries {
             Queries::HumanWgsNanopore => &suite_config.query_paths.human_wgs_nanopore,
+            Queries::Debug => &suite_config.query_paths.debug,
         };
 
         // from here on the actual floxer command
