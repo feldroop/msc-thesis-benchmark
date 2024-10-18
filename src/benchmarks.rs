@@ -18,6 +18,7 @@ static UNNAMED_BENCHMARK_ID: AtomicUsize = AtomicUsize::new(0);
 pub enum Benchmark {
     AnchorGroupOrder,
     Debug,
+    ExtraVerificationRatio,
     IntervalOptimization,
     PexSeedErrors,
     PexTreeBuilding,
@@ -38,6 +39,7 @@ impl Benchmark {
         match *self {
             Benchmark::AnchorGroupOrder => anchor_group_order(suite_config),
             Benchmark::Debug => debug_benchmark(suite_config),
+            Benchmark::ExtraVerificationRatio => extra_verification_ratio(suite_config),
             Benchmark::IntervalOptimization => interval_optimization(suite_config),
             Benchmark::PexSeedErrors => pex_seed_errors(suite_config),
             Benchmark::PexTreeBuilding => pex_tree_building(suite_config),
@@ -192,11 +194,23 @@ fn debug_benchmark(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
     Ok(())
 }
 
-fn profile(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    let _ = FloxerParameterBenchmark::from_iter([Default::default()])
-        .name("profile")
-        .with_profile()
-        .run(suite_config);
+fn extra_verification_ratio(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+    let res = FloxerParameterBenchmark::from_iter([0.01, 0.02, 0.05, 0.1, 0.2].into_iter().map(
+        |extra_verification_ratio| FloxerConfig {
+            algorithm_config: FloxerAlgorithmConfig {
+                extra_verification_ratio,
+                ..Default::default()
+            },
+            name: Some(
+                format!("extra_verification_ratio_{extra_verification_ratio}").replace('.', "_"),
+            ),
+            ..Default::default()
+        },
+    ))
+    .name("extra_verification_ratio")
+    .run(suite_config)?;
+
+    res.plot_alignment_stats(suite_config);
 
     Ok(())
 }
@@ -255,6 +269,15 @@ fn pex_tree_building(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
 
     res.plot_seed_stats(suite_config);
     res.plot_anchor_stats(suite_config);
+
+    Ok(())
+}
+
+fn profile(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+    let _ = FloxerParameterBenchmark::from_iter([Default::default()])
+        .name("profile")
+        .with_profile()
+        .run(suite_config);
 
     Ok(())
 }
