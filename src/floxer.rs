@@ -165,6 +165,9 @@ impl FloxerConfig {
                     .arg(&perf_data_path)
                     .arg("-F")
                     .arg("100")
+                    .arg("--call-graph")
+                    .arg("dwarf,16384")
+                    .arg("-g") // both user and kernel space
                     .arg("--")
                     .arg("/usr/bin/time");
                 command
