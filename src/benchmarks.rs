@@ -22,6 +22,7 @@ pub enum Benchmark {
     IntervalOptimization,
     PexSeedErrors,
     PexTreeBuilding,
+    ProblemQuery,
     Profile,
     QueryErrorRate,
     VerificationAlgorithm,
@@ -44,6 +45,7 @@ impl Benchmark {
             Benchmark::PexSeedErrors => pex_seed_errors(suite_config),
             Benchmark::PexTreeBuilding => pex_tree_building(suite_config),
             Benchmark::Profile => profile(suite_config),
+            Benchmark::ProblemQuery => problem_query(suite_config),
             Benchmark::QueryErrorRate => query_error_rate(suite_config),
             Benchmark::VerificationAlgorithm => verification_algorithm(suite_config),
         }
@@ -254,16 +256,27 @@ fn pex_seed_errors(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
 }
 
 fn pex_tree_building(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    let res = FloxerParameterBenchmark::from_iter(PexTreeConstruction::iter().map(
-        |pex_tree_construction| FloxerConfig {
+    let res = FloxerParameterBenchmark::from_iter(
+        [
+            PexTreeConstruction::TopDown,
+            PexTreeConstruction::BottomUp,
+            PexTreeConstruction::BottomUp,
+        ]
+        .into_iter()
+        .zip([2, 1, 2])
+        .map(|(pex_tree_construction, pex_seed_errors)| FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
                 pex_tree_construction,
+                pex_seed_errors,
                 ..Default::default()
             },
-            name: Some(pex_tree_construction.to_string()),
+            name: Some(format!(
+                "{}_{}_seed_errors",
+                pex_tree_construction, pex_seed_errors
+            )),
             ..Default::default()
-        },
-    ))
+        }),
+    )
     .name("pex_tree_building")
     .run(suite_config)?;
 
@@ -278,6 +291,22 @@ fn profile(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
         .name("profile")
         .with_profile()
         .run(suite_config);
+
+    Ok(())
+}
+
+fn problem_query(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+    let res = FloxerParameterBenchmark::from_iter([FloxerConfig {
+        queries: Queries::ProblemQuery,
+        algorithm_config: FloxerAlgorithmConfig {
+            pex_seed_errors: 1,
+            ..Default::default()
+        },
+        ..Default::default()
+    }])
+    .name("problem_query")
+    .with_profile()
+    .run(suite_config);
 
     Ok(())
 }

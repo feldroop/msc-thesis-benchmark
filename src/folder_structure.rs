@@ -2,6 +2,7 @@ use jiff::Zoned;
 
 use std::path::{Path, PathBuf};
 
+#[derive(Debug, Clone)]
 pub struct BenchmarkFolder {
     base_output_folder: PathBuf,
 }

@@ -36,6 +36,7 @@ pub enum Queries {
     HumanWgsNanopore,
     HumanWgsNanoporeSmall,
     Debug,
+    ProblemQuery,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -189,6 +190,7 @@ impl FloxerConfig {
             Queries::HumanWgsNanopore => &suite_config.query_paths.human_wgs_nanopore,
             Queries::HumanWgsNanoporeSmall => &suite_config.query_paths.human_wgs_nanopore_small,
             Queries::Debug => &suite_config.query_paths.debug,
+            Queries::ProblemQuery => &suite_config.query_paths.problem_query,
         };
 
         // from here on the actual floxer command
@@ -275,7 +277,7 @@ impl FloxerConfig {
             create_profile(
                 &perf_data_path,
                 &profile_path,
-                "floxer_profile",
+                &self.full_name(benchmark_name),
                 suite_config,
             )?;
         }
