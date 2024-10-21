@@ -16,6 +16,7 @@ static UNNAMED_BENCHMARK_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug, Clone, Copy, EnumIter, ValueEnum)]
 pub enum Benchmark {
+    AllowedIntervalOverlapRatio,
     AnchorGroupOrder,
     Debug,
     ExtraVerificationRatio,
@@ -38,6 +39,7 @@ pub enum ProfileConfig {
 impl Benchmark {
     pub fn run(&self, suite_config: &BenchmarkSuiteConfig) -> Result<()> {
         match *self {
+            Benchmark::AllowedIntervalOverlapRatio => allowed_interval_overlap_ratio(suite_config),
             Benchmark::AnchorGroupOrder => anchor_group_order(suite_config),
             Benchmark::Debug => debug_benchmark(suite_config),
             Benchmark::ExtraVerificationRatio => extra_verification_ratio(suite_config),
@@ -152,6 +154,30 @@ impl BenchmarkResult {
             suite_config,
         );
     }
+}
+
+fn allowed_interval_overlap_ratio(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+    let res = FloxerParameterBenchmark::from_iter([1.0, 0.95, 0.9, 0.5, 0.01].into_iter().map(
+        |allowed_interval_overlap_ratio| {
+            FloxerConfig {
+                algorithm_config: FloxerAlgorithmConfig {
+                    allowed_interval_overlap_ratio,
+                    ..Default::default()
+                },
+                name: Some(
+                    format!("allowed_interval_overlap_ratio_{allowed_interval_overlap_ratio}")
+                        .replace('.', "_"),
+                ),
+                ..Default::default()
+            }
+        },
+    ))
+    .name("allowed_interval_overlap_ratio")
+    .run(suite_config)?;
+
+    res.plot_alignment_stats(suite_config);
+
+    Ok(())
 }
 
 fn anchor_group_order(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
@@ -296,10 +322,11 @@ fn profile(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
 }
 
 fn problem_query(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    let res = FloxerParameterBenchmark::from_iter([FloxerConfig {
+    let _ = FloxerParameterBenchmark::from_iter([FloxerConfig {
         queries: Queries::ProblemQuery,
         algorithm_config: FloxerAlgorithmConfig {
             pex_seed_errors: 1,
+            extra_verification_ratio: 0.5,
             ..Default::default()
         },
         ..Default::default()

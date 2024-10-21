@@ -91,6 +91,7 @@ pub struct FloxerAlgorithmConfig {
     pub pex_tree_construction: PexTreeConstruction,
     pub interval_optimization: IntervalOptimization,
     pub extra_verification_ratio: f64,
+    pub allowed_interval_overlap_ratio: f64,
     pub verification_algorithm: VerificationAlgorithm,
     pub num_threads: u16,
 }
@@ -106,6 +107,7 @@ impl Default for FloxerAlgorithmConfig {
             pex_tree_construction: PexTreeConstruction::BottomUp,
             interval_optimization: IntervalOptimization::On,
             extra_verification_ratio: 0.02,
+            allowed_interval_overlap_ratio: 1.0,
             verification_algorithm: VerificationAlgorithm::Hierarchical,
             num_threads: 64,
         }
@@ -234,6 +236,11 @@ impl FloxerConfig {
             &self.algorithm_config.anchor_group_order.to_string(),
             "--extra-verification-ratio",
             &self.algorithm_config.extra_verification_ratio.to_string(),
+            "--allowed-interval-overlap-ratio",
+            &self
+                .algorithm_config
+                .allowed_interval_overlap_ratio
+                .to_string(),
             "--threads",
             &self.algorithm_config.num_threads.to_string(),
         ]);
@@ -251,13 +258,8 @@ impl FloxerConfig {
         }
 
         println!(
-            "- Running the benchmark: {}{}",
-            benchmark_name,
-            if let Some(instance_name) = &self.name {
-                format!(" - {instance_name}")
-            } else {
-                String::new()
-            }
+            "- Running the benchmark: {}",
+            self.full_name(benchmark_name)
         );
         let floxer_proc_output = command.output()?;
 
@@ -294,6 +296,14 @@ impl FloxerConfig {
             resource_metrics,
         })
     }
+
+    fn full_name(&self, benchmark_name: &str) -> String {
+        if let Some(instance_name) = &self.name {
+            format!("{}__{}", benchmark_name, instance_name)
+        } else {
+            benchmark_name.to_owned()
+        }
+    }
 }
 
 fn create_profile(
@@ -325,7 +335,7 @@ fn create_profile(
     std::fs::copy(profile_path, all_plots_profile_path)?;
 
     let mut flamegraph_path = profile_path.to_owned();
-    flamegraph_path.set_file_name("flamegraph");
+    flamegraph_path.set_file_name(format!("flamegraph_{}", profile_name));
     flamegraph_path.set_extension("svg");
 
     let flamegraph_output = Command::new("flamegraph")
