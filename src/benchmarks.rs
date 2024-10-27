@@ -278,6 +278,26 @@ fn interval_optimization(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
     Ok(())
 }
 
+fn max_anchors(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+    let res = FloxerParameterBenchmark::from_iter([20, 50, 100, 200].into_iter().map(
+        |max_num_anchors| FloxerConfig {
+            algorithm_config: FloxerAlgorithmConfig {
+                max_num_anchors,
+                ..Default::default()
+            },
+            name: Some(format!("max_anchors_{max_num_anchors}")),
+            ..Default::default()
+        },
+    ))
+    .name("max_anchors")
+    .run(suite_config)?;
+
+    res.plot_seed_stats(suite_config);
+    res.plot_anchor_stats(suite_config);
+
+    Ok(())
+}
+
 fn pex_seed_errors(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
     let res = FloxerParameterBenchmark::from_iter((0..4).map(|pex_seed_errors| FloxerConfig {
         algorithm_config: FloxerAlgorithmConfig {
