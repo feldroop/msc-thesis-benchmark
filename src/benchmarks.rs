@@ -243,6 +243,21 @@ fn extra_verification_ratio(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
     Ok(())
 }
 
+fn index_build(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+    let _ = FloxerParameterBenchmark::from_iter([FloxerConfig {
+        algorithm_config: FloxerAlgorithmConfig {
+            index_strategy: IndexStrategy::AlwaysRebuild,
+            ..Default::default()
+        },
+        queries: Queries::Debug, // here we only care about the index building and skip the queries
+        ..Default::default()
+    }])
+    .name("index_build")
+    .run(suite_config)?;
+
+    Ok(())
+}
+
 fn interval_optimization(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
     let res = FloxerParameterBenchmark::from_iter(IntervalOptimization::iter().map(
         |interval_optimization| FloxerConfig {
