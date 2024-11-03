@@ -11,3 +11,4 @@ anyhow = "1.0.89"
 jiff = { version = "0.1.13", features = ["std"] }
 charming = { version = "0.4.0", features = ["ssr"] }
 strum = { version = "0.26", features = ["derive"] }
+rust-htslib = "0.47.0"

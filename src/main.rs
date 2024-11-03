@@ -1,9 +1,10 @@
+mod analyze_mapped_reads;
 mod benchmarks;
 mod cli;
 mod config;
-mod floxer;
 mod folder_structure;
 mod plots;
+mod readmappers;
 
 use std::{error::Error, fs};
 

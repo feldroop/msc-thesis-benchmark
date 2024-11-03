@@ -1,49 +1,16 @@
 use crate::{
-    benchmarks::ProfileConfig, config::BenchmarkSuiteConfig, folder_structure::BenchmarkFolder,
+    analyze_mapped_reads::{analyze_alignments, MappedReadsStats},
+    benchmarks::ProfileConfig,
+    config::BenchmarkSuiteConfig,
+    folder_structure::BenchmarkFolder,
 };
 
 use std::{fs, path::Path, process::Command};
 
+use super::{IndexStrategy, Queries, Reference, ResourceMetrics};
 use anyhow::{bail, Result};
 use serde::Deserialize;
 use strum::{Display, EnumIter};
-
-const TIME_TOOL_FORMAT_STRING: &str = "wall_clock_seconds = %e
-user_cpu_seconds = %U
-system_cpu_seconds = %S
-peak_memory_kilobytes = %M
-average_memory_kilobytes = %K";
-
-#[derive(Debug, Default, Copy, Clone)]
-pub enum Reference {
-    #[default]
-    HumanGenomeHg38,
-    Debug,
-}
-
-impl Reference {
-    fn name_for_files(&self) -> &str {
-        match self {
-            Self::HumanGenomeHg38 => "human-genome-hg38",
-            Self::Debug => "debug",
-        }
-    }
-}
-
-#[derive(Debug, Default, Copy, Clone)]
-pub enum Queries {
-    #[default]
-    HumanWgsNanopore,
-    HumanWgsNanoporeSmall,
-    Debug,
-    ProblemQuery,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum IndexStrategy {
-    AlwaysRebuild,
-    ReadFromDiskIfStored,
-}
 
 #[derive(Debug, Copy, Clone)]
 pub enum QueryErrors {
@@ -109,7 +76,7 @@ impl Default for FloxerAlgorithmConfig {
             extra_verification_ratio: 0.02,
             allowed_interval_overlap_ratio: 1.0,
             verification_algorithm: VerificationAlgorithm::Hierarchical,
-            num_threads: 64,
+            num_threads: super::NUM_THREADS_FOR_READMAPPERS,
         }
     }
 }
@@ -177,23 +144,11 @@ impl FloxerConfig {
             }
         };
 
-        command
-            .arg("--output")
-            .arg(&timing_path)
-            .arg("--format")
-            .arg(TIME_TOOL_FORMAT_STRING);
+        super::add_time_args(&mut command, &timing_path);
 
-        let reference_path = match self.reference {
-            Reference::HumanGenomeHg38 => &suite_config.reference_paths.human_genome_hg38,
-            Reference::Debug => &suite_config.reference_paths.debug,
-        };
+        let reference_path = self.reference.path(suite_config);
 
-        let queries_path = match self.queries {
-            Queries::HumanWgsNanopore => &suite_config.query_paths.human_wgs_nanopore,
-            Queries::HumanWgsNanoporeSmall => &suite_config.query_paths.human_wgs_nanopore_small,
-            Queries::Debug => &suite_config.query_paths.debug,
-            Queries::ProblemQuery => &suite_config.query_paths.problem_query,
-        };
+        let queries_path = self.queries.path(suite_config);
 
         // from here on the actual floxer command
         command
@@ -209,9 +164,12 @@ impl FloxerConfig {
             .arg("--stats")
             .arg(&stats_path);
 
-        if let IndexStrategy::ReadFromDiskIfStored = self.algorithm_config.index_strategy {
+        if self.algorithm_config.index_strategy == IndexStrategy::ReadFromDiskIfStored {
             let mut index_path = suite_config.index_folder();
-            let index_file_name = format!("floxer-index-{}.flxi", self.reference.name_for_files());
+            let index_file_name = format!(
+                "floxer-index-{}.flxi",
+                self.reference.name_for_output_files()
+            );
             index_path.push(index_file_name);
 
             command.arg("--index");
@@ -236,11 +194,6 @@ impl FloxerConfig {
             &self.algorithm_config.anchor_group_order.to_string(),
             "--extra-verification-ratio",
             &self.algorithm_config.extra_verification_ratio.to_string(),
-            "--allowed-interval-overlap-ratio",
-            &self
-                .algorithm_config
-                .allowed_interval_overlap_ratio
-                .to_string(),
             "--threads",
             &self.algorithm_config.num_threads.to_string(),
         ]);
@@ -250,7 +203,14 @@ impl FloxerConfig {
         }
 
         if let IntervalOptimization::On = self.algorithm_config.interval_optimization {
-            command.arg("--interval-optimization");
+            command.args([
+                "--interval-optimization",
+                "--allowed-interval-overlap-ratio",
+                &self
+                    .algorithm_config
+                    .allowed_interval_overlap_ratio
+                    .to_string(),
+            ]);
         }
 
         if let VerificationAlgorithm::DirectFull = self.algorithm_config.verification_algorithm {
@@ -271,7 +231,6 @@ impl FloxerConfig {
                 floxer_proc_output
             );
         }
-
         let mut profile_path = output_folder.clone();
         profile_path.push("samply_profile.json");
 
@@ -290,10 +249,13 @@ impl FloxerConfig {
         let timings_file_str = fs::read_to_string(timing_path)?;
         let resource_metrics: ResourceMetrics = toml::from_str(&timings_file_str)?;
 
+        let mapped_read_stats = analyze_alignments(output_path)?;
+
         Ok(FloxerRunResult {
             benchmark_instance_name: self.name.clone().unwrap_or_else(|| String::from("floxer")),
             stats,
             resource_metrics,
+            mapped_read_stats,
         })
     }
 
@@ -365,6 +327,7 @@ pub struct FloxerRunResult {
     pub benchmark_instance_name: String,
     pub stats: FloxerStats,
     pub resource_metrics: ResourceMetrics,
+    pub mapped_read_stats: MappedReadsStats,
 }
 
 #[derive(Debug, Deserialize)]
@@ -459,7 +422,6 @@ impl AnchorStats {
 #[derive(Debug, Deserialize)]
 pub struct AlignmentStats {
     pub reference_span_sizes_aligned_of_inner_nodes: HistogramData,
-    pub reference_span_sizes_alignment_avoided_of_inner_nodes: HistogramData,
     pub reference_span_sizes_aligned_of_roots: HistogramData,
     pub reference_span_sizes_alignment_avoided_of_roots: HistogramData,
 }
@@ -468,7 +430,6 @@ impl AlignmentStats {
     pub fn iter_histograms(&self) -> impl Iterator<Item = &HistogramData> {
         [
             &self.reference_span_sizes_aligned_of_inner_nodes,
-            &self.reference_span_sizes_alignment_avoided_of_inner_nodes,
             &self.reference_span_sizes_aligned_of_roots,
             &self.reference_span_sizes_alignment_avoided_of_roots,
         ]
@@ -478,7 +439,6 @@ impl AlignmentStats {
     pub fn iter_metric_names(&self) -> impl Iterator<Item = &'static str> {
         [
             "Ref span sizes aligned inner",
-            "Ref span sizes alignment avoided inner",
             "Ref span sizes aligned roots",
             "Ref span sizes alignment avoided roots",
         ]
@@ -509,18 +469,9 @@ impl HistogramData {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct DescriptiveStats {
     pub min_value: usize,
     pub mean: f64,
     pub max_value: usize,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ResourceMetrics {
-    pub wall_clock_seconds: f64,
-    pub user_cpu_seconds: f64,
-    pub system_cpu_seconds: f64,
-    pub peak_memory_kilobytes: usize,
-    pub average_memory_kilobytes: usize,
 }

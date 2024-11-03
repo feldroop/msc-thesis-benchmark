@@ -1,12 +1,14 @@
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::config::BenchmarkSuiteConfig;
-use crate::floxer::{
-    AnchorGroupOrder, FloxerAlgorithmConfig, FloxerConfig, FloxerRunResult, IntervalOptimization,
-    PexTreeConstruction, Queries, QueryErrors, Reference, VerificationAlgorithm,
-};
 use crate::folder_structure::BenchmarkFolder;
 use crate::plots;
+use crate::readmappers::floxer::{
+    AnchorGroupOrder, FloxerAlgorithmConfig, FloxerConfig, FloxerRunResult, IntervalOptimization,
+    PexTreeConstruction, QueryErrors, VerificationAlgorithm,
+};
+use crate::readmappers::{IndexStrategy, Queries, Reference};
 
 use anyhow::{bail, Result};
 use clap::ValueEnum;
@@ -14,13 +16,15 @@ use strum::{EnumIter, IntoEnumIterator};
 
 static UNNAMED_BENCHMARK_ID: AtomicUsize = AtomicUsize::new(0);
 
-#[derive(Debug, Clone, Copy, EnumIter, ValueEnum)]
+#[derive(Debug, Clone, Copy, EnumIter, ValueEnum, PartialEq, Eq, Hash)]
 pub enum Benchmark {
     AllowedIntervalOverlapRatio,
     AnchorGroupOrder,
     Debug,
     ExtraVerificationRatio,
+    IndexBuild,
     IntervalOptimization,
+    MaxAnchors,
     PexSeedErrors,
     PexTreeBuilding,
     ProblemQuery,
@@ -43,7 +47,9 @@ impl Benchmark {
             Benchmark::AnchorGroupOrder => anchor_group_order(suite_config),
             Benchmark::Debug => debug_benchmark(suite_config),
             Benchmark::ExtraVerificationRatio => extra_verification_ratio(suite_config),
+            Benchmark::IndexBuild => index_build(suite_config),
             Benchmark::IntervalOptimization => interval_optimization(suite_config),
+            Benchmark::MaxAnchors => max_anchors(suite_config),
             Benchmark::PexSeedErrors => pex_seed_errors(suite_config),
             Benchmark::PexTreeBuilding => pex_tree_building(suite_config),
             Benchmark::Profile => profile(suite_config),
@@ -58,8 +64,14 @@ pub fn run_benchmarks<I: IntoIterator<Item = Benchmark>>(
     benchmarks: I,
     suite_config: &BenchmarkSuiteConfig,
 ) -> Result<()> {
+    let skip_for_now: HashSet<_> = [Benchmark::VerificationAlgorithm].into_iter().collect();
+
     let mut num_error_runs = 0;
     for benchmark in benchmarks.into_iter() {
+        if skip_for_now.contains(&benchmark) {
+            continue;
+        }
+
         if let Err(err) = benchmark.run(suite_config) {
             println!("{}", err);
             num_error_runs += 1;
@@ -154,6 +166,18 @@ impl BenchmarkResult {
             suite_config,
         );
     }
+
+    pub fn plot_mapped_reads_stats(&self, suite_config: &BenchmarkSuiteConfig) {
+        plots::plot_mapped_reads_stats(
+            self.floxer_results.iter().map(|res| &res.mapped_read_stats),
+            &format!("{} mapped reads stats", self.benchmark_name),
+            self.floxer_results
+                .iter()
+                .map(|run| &run.benchmark_instance_name),
+            &self.folder,
+            suite_config,
+        );
+    }
 }
 
 fn allowed_interval_overlap_ratio(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
@@ -217,7 +241,7 @@ fn debug_benchmark(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
         },
     ))
     .name("debug")
-    .run(suite_config);
+    .run(suite_config)?;
 
     Ok(())
 }
@@ -320,11 +344,12 @@ fn pex_tree_building(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
     let res = FloxerParameterBenchmark::from_iter(
         [
             PexTreeConstruction::TopDown,
+            PexTreeConstruction::TopDown,
             PexTreeConstruction::BottomUp,
             PexTreeConstruction::BottomUp,
         ]
         .into_iter()
-        .zip([2, 1, 2])
+        .zip([1, 2, 1, 2])
         .map(|(pex_tree_construction, pex_seed_errors)| FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
                 pex_tree_construction,
@@ -361,7 +386,7 @@ fn problem_query(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
         queries: Queries::ProblemQuery,
         algorithm_config: FloxerAlgorithmConfig {
             pex_seed_errors: 1,
-            extra_verification_ratio: 0.5,
+            allowed_interval_overlap_ratio: 0.8,
             ..Default::default()
         },
         ..Default::default()
@@ -484,6 +509,7 @@ impl FloxerParameterBenchmark {
         };
 
         res.plot_general_stats(suite_config);
+        res.plot_mapped_reads_stats(suite_config);
 
         Ok(res)
     }

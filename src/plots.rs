@@ -1,14 +1,15 @@
 use std::fs;
 
 use crate::{
+    analyze_mapped_reads::MappedReadsStats,
     config::BenchmarkSuiteConfig,
-    floxer::{HistogramData, ResourceMetrics},
     folder_structure::BenchmarkFolder,
+    readmappers::{floxer::HistogramData, ResourceMetrics},
 };
 
 use charming::{
     component::{Axis, Grid, Legend, Title},
-    element::{NameLocation, TextStyle},
+    element::{Formatter, Label, LabelPosition, NameLocation, TextStyle},
     series::Bar,
     Chart, ImageRenderer,
 };
@@ -80,6 +81,88 @@ pub fn plot_resource_metrics<'a>(
     );
 }
 
+pub fn plot_mapped_reads_stats<'a, S>(
+    iter: impl IntoIterator<Item = &'a MappedReadsStats>,
+    title: &str,
+    instance_names: impl IntoIterator<Item = S>,
+    benchmark_folder: &BenchmarkFolder,
+    suite_config: &BenchmarkSuiteConfig,
+) where
+    S: AsRef<str>,
+{
+    let offset_str = "54%";
+    let instance_names: Vec<_> = instance_names
+        .into_iter()
+        .map(|s| s.as_ref().to_owned())
+        .collect();
+
+    let (num_mapped_per_instance, edit_distances_per_instance): (Vec<_>, Vec<_>) = iter
+        .into_iter()
+        .map(|stats| {
+            (
+                stats.num_mapped,
+                stats.primary_alignment_edit_distances.clone(),
+            )
+        })
+        .collect();
+
+    let edit_distance_averages: Vec<_> = edit_distances_per_instance
+        .iter()
+        .map(|edit_distances| {
+            let sum: i64 = edit_distances.iter().map(|&value| value as i64).sum();
+            let avg = sum as f64 / edit_distances.len() as f64;
+            ((avg * 1000.0).round()) / 1000.0
+        })
+        .collect();
+
+    let chart = Chart::new()
+        .title(Title::new().text(title))
+        // .legend(Legend::new().right("10%"))
+        .grid(Grid::new().right(offset_str))
+        .grid(Grid::new().left(offset_str))
+        .background_color("white")
+        .x_axis(Axis::new().data(instance_names.clone()).grid_index(0))
+        .y_axis(Axis::new().name("Number of aligned queries").grid_index(0))
+        .x_axis(Axis::new().data(instance_names).grid_index(1))
+        .y_axis(
+            Axis::new()
+                .name("Avg. edit distance of primary alignments")
+                .grid_index(1),
+        )
+        .series(
+            Bar::new()
+                .data(num_mapped_per_instance)
+                .x_axis_index(0)
+                .y_axis_index(0)
+                .label(Label::new().show(true).position(LabelPosition::Top)),
+        )
+        .series(
+            Bar::new()
+                .data(edit_distance_averages)
+                .x_axis_index(1)
+                .y_axis_index(1)
+                .label(
+                    Label::new()
+                        .show(true)
+                        .position(LabelPosition::Top)
+                        .formatter(Formatter::Function(
+                            "function (param) { return param.data.toFixed(2); }".into(),
+                        )),
+                ),
+        );
+
+    let plot_name_for_file = title.to_ascii_lowercase().replace(' ', "_");
+
+    save_chart(
+        chart,
+        plot_name_for_file,
+        1200,
+        800,
+        benchmark_folder,
+        suite_config,
+    );
+}
+
 pub fn plot_histogram_data_in_grid<'a, I, S1, S2>(
     iter: impl IntoIterator<Item = I>,
     title: &str,
@@ -97,6 +180,18 @@ pub fn plot_histogram_data_in_grid<'a, I, S1, S2>(
         .into_iter()
         .map(|run| run.into_iter().collect())
         .collect();
+
+    let mut x_max_per_metric = Vec::new();
+    for metric_index in 0..(runs[0].len()) {
+        let x_max = runs
+            .iter()
+            .map(|run| {
+                nice_upper_bound(*run[metric_index].occurrences.iter().max().unwrap()) as i32
+            })
+            .max()
+            .unwrap();
+        x_max_per_metric.push(x_max);
+    }
 
     let num_columns = runs.len();
     let num_rows = runs.first().expect("at least one run to plot").len();
@@ -174,6 +269,7 @@ pub fn plot_histogram_data_in_grid<'a, I, S1, S2>(
                 histogram,
                 &metric_names[row_index],
                 index as i32,
+                x_max_per_metric[row_index],
             );
         }
     }
@@ -254,6 +350,7 @@ fn add_histogram_data_to_chart(
     histogram: &HistogramData,
     name: &str,
     index: i32,
+    max_x: i32,
 ) -> Chart {
     let x_axis_name = if let Some(descriptive_stats) = &histogram.descriptive_stats {
         format!(
@@ -278,7 +375,8 @@ fn add_histogram_data_to_chart(
             Axis::new()
                 .name(format!("Occurrences (total: {})", histogram.num_values))
                 .name_text_style(TextStyle::new().font_size(LABEL_FONT_SIZE))
-                .grid_index(index),
+                .grid_index(index)
+                .max(max_x),
         )
         .series(
             Bar::new()
@@ -316,4 +414,23 @@ fn save_chart(
     renderer
         .save(&chart, in_all_plots_folder)
         .expect("failed to save a plot to all plots folder");
+}
+
+fn nice_upper_bound(value: usize) -> usize {
+    let max_upper_bound = (value as f64 * 1.2) as usize;
+
+    let exp = ((value as f64).log10() - 1.0)
+        .clamp(0.0, f64::INFINITY)
+        .round();
+
+    let inc = 10.0f64.powf(exp) as usize;
+    let factor = max_upper_bound / inc;
+
+    let upper_bound = inc * factor;
+
+    if upper_bound < value {
+        upper_bound + inc
+    } else {
+        upper_bound
+    }
 }
