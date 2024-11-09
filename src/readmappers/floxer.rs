@@ -60,6 +60,7 @@ pub struct FloxerAlgorithmConfig {
     pub extra_verification_ratio: f64,
     pub allowed_interval_overlap_ratio: f64,
     pub verification_algorithm: VerificationAlgorithm,
+    pub num_anchors_per_verification_task: usize,
     pub num_threads: u16,
 }
 
@@ -76,6 +77,7 @@ impl Default for FloxerAlgorithmConfig {
             extra_verification_ratio: 0.02,
             allowed_interval_overlap_ratio: 1.0,
             verification_algorithm: VerificationAlgorithm::Hierarchical,
+            num_anchors_per_verification_task: 100,
             num_threads: super::NUM_THREADS_FOR_READMAPPERS,
         }
     }
@@ -196,6 +198,11 @@ impl FloxerConfig {
             &self.algorithm_config.extra_verification_ratio.to_string(),
             "--threads",
             &self.algorithm_config.num_threads.to_string(),
+            "--num-anchors-per-task",
+            &self
+                .algorithm_config
+                .num_anchors_per_verification_task
+                .to_string(),
         ]);
 
         if let PexTreeConstruction::BottomUp = self.algorithm_config.pex_tree_construction {

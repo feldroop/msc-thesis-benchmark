@@ -20,6 +20,7 @@ static UNNAMED_BENCHMARK_ID: AtomicUsize = AtomicUsize::new(0);
 pub enum Benchmark {
     AllowedIntervalOverlapRatio,
     AnchorGroupOrder,
+    AnchorsPerVerificationTask,
     Debug,
     ExtraVerificationRatio,
     IndexBuild,
@@ -45,6 +46,7 @@ impl Benchmark {
         match *self {
             Benchmark::AllowedIntervalOverlapRatio => allowed_interval_overlap_ratio(suite_config),
             Benchmark::AnchorGroupOrder => anchor_group_order(suite_config),
+            Benchmark::AnchorsPerVerificationTask => anchors_per_verification_task(suite_config),
             Benchmark::Debug => debug_benchmark(suite_config),
             Benchmark::ExtraVerificationRatio => extra_verification_ratio(suite_config),
             Benchmark::IndexBuild => index_build(suite_config),
@@ -220,6 +222,25 @@ fn anchor_group_order(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
         .run(suite_config)?;
 
     res.plot_anchor_stats(suite_config);
+
+    Ok(())
+}
+
+fn anchors_per_verification_task(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+    FloxerParameterBenchmark::from_iter([1000, 10_000, 1_000_000_000].into_iter().map(
+        |num_anchors_per_verification_task| FloxerConfig {
+            algorithm_config: FloxerAlgorithmConfig {
+                num_anchors_per_verification_task,
+                ..Default::default()
+            },
+            name: Some(format!(
+                "anchors_per_task_{num_anchors_per_verification_task}"
+            )),
+            ..Default::default()
+        },
+    ))
+    .name("anchors_per_verification_task")
+    .run(suite_config)?;
 
     Ok(())
 }
