@@ -77,7 +77,7 @@ impl Default for FloxerAlgorithmConfig {
             extra_verification_ratio: 0.02,
             allowed_interval_overlap_ratio: 1.0,
             verification_algorithm: VerificationAlgorithm::Hierarchical,
-            num_anchors_per_verification_task: 100,
+            num_anchors_per_verification_task: 1000,
             num_threads: super::NUM_THREADS_FOR_READMAPPERS,
         }
     }
