@@ -31,6 +31,7 @@ pub enum Benchmark {
     ProblemQuery,
     Profile,
     QueryErrorRate,
+    Threads,
     VerificationAlgorithm,
 }
 
@@ -57,6 +58,7 @@ impl Benchmark {
             Benchmark::Profile => profile(suite_config),
             Benchmark::ProblemQuery => problem_query(suite_config),
             Benchmark::QueryErrorRate => query_error_rate(suite_config),
+            Benchmark::Threads => threads(suite_config),
             Benchmark::VerificationAlgorithm => verification_algorithm(suite_config),
         }
     }
@@ -227,7 +229,7 @@ fn anchor_group_order(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
 }
 
 fn anchors_per_verification_task(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    FloxerParameterBenchmark::from_iter([1000, 10_000, 1_000_000_000].into_iter().map(
+    FloxerParameterBenchmark::from_iter([3000, 10_000, 1_000_000_000].into_iter().map(
         |num_anchors_per_verification_task| FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
                 num_anchors_per_verification_task,
@@ -420,7 +422,7 @@ fn problem_query(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
 }
 
 fn query_error_rate(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    let res = FloxerParameterBenchmark::from_iter([0.03, 0.05, 0.07, 0.09].into_iter().map(
+    let res = FloxerParameterBenchmark::from_iter([0.05, 0.07, 0.09, 0.11, 0.13].into_iter().map(
         |query_error_ratio| FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
                 query_errors: QueryErrors::Rate(query_error_ratio),
@@ -435,6 +437,23 @@ fn query_error_rate(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
 
     res.plot_seed_stats(suite_config);
     res.plot_anchor_stats(suite_config);
+
+    Ok(())
+}
+
+fn threads(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+    FloxerParameterBenchmark::from_iter([4, 8, 12, 16].into_iter().map(|num_threads| {
+        FloxerConfig {
+            algorithm_config: FloxerAlgorithmConfig {
+                num_threads,
+                ..Default::default()
+            },
+            name: Some(format!("num_threads_{num_threads}")),
+            ..Default::default()
+        }
+    }))
+    .name("num_threads")
+    .run(suite_config)?;
 
     Ok(())
 }

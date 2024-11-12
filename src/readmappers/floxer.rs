@@ -68,16 +68,16 @@ impl Default for FloxerAlgorithmConfig {
     fn default() -> Self {
         FloxerAlgorithmConfig {
             index_strategy: IndexStrategy::ReadFromDiskIfStored,
-            query_errors: QueryErrors::Rate(0.07),
+            query_errors: QueryErrors::Rate(0.09),
             pex_seed_errors: 2,
             max_num_anchors: 100,
-            anchor_group_order: AnchorGroupOrder::Hybrid,
+            anchor_group_order: AnchorGroupOrder::CountFirst,
             pex_tree_construction: PexTreeConstruction::BottomUp,
             interval_optimization: IntervalOptimization::On,
-            extra_verification_ratio: 0.02,
+            extra_verification_ratio: 0.05,
             allowed_interval_overlap_ratio: 1.0,
             verification_algorithm: VerificationAlgorithm::Hierarchical,
-            num_anchors_per_verification_task: 1000,
+            num_anchors_per_verification_task: 10_000,
             num_threads: super::NUM_THREADS_FOR_READMAPPERS,
         }
     }
@@ -348,6 +348,7 @@ pub struct FloxerStats {
     pub alignment_stats: AlignmentStats,
     pub alignments_per_query: HistogramData,
     pub alignments_edit_distance: HistogramData,
+    pub milliseconds_spent_per_query: HistogramData,
 }
 
 impl FloxerStats {
@@ -356,6 +357,7 @@ impl FloxerStats {
             &self.query_lengths,
             &self.alignments_per_query,
             &self.alignments_edit_distance,
+            &self.milliseconds_spent_per_query,
         ]
         .into_iter()
     }
@@ -365,6 +367,7 @@ impl FloxerStats {
             "Query lenghts",
             "Alignments per query",
             "Edit distances of alignments",
+            "Milliseconds spent per query",
         ]
         .into_iter()
     }
