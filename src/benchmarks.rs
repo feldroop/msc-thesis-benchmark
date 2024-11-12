@@ -351,8 +351,11 @@ fn max_anchors(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
 fn minimap(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
     let name = "vs_minimap";
     let folder = BenchmarkFolder::new(&suite_config.output_folder, name);
-    let floxer_res =
-        FloxerConfig::default().run(&folder, "floxer", suite_config, ProfileConfig::Off)?;
+    let floxer_res = FloxerConfig {
+        name: Some(String::from("floxer")),
+        ..Default::default()
+    }
+    .run(&folder, name, suite_config, ProfileConfig::Off)?;
 
     let minimap_res = MinimapConfig::default().run(&folder, suite_config)?;
 
