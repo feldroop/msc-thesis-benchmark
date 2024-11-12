@@ -30,7 +30,8 @@ impl MinimapConfig {
         benchmark_folder: &BenchmarkFolder,
         suite_config: &BenchmarkSuiteConfig,
     ) -> Result<MinimapRunResult> {
-        let output_folder = benchmark_folder.get().to_path_buf();
+        let mut output_folder = benchmark_folder.get().to_path_buf();
+        output_folder.push("minimap");
 
         if !output_folder.exists() {
             fs::create_dir_all(&output_folder)?;

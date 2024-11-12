@@ -8,6 +8,7 @@ use crate::readmappers::floxer::{
     AnchorGroupOrder, FloxerAlgorithmConfig, FloxerConfig, FloxerRunResult, IntervalOptimization,
     PexTreeConstruction, QueryErrors, VerificationAlgorithm,
 };
+use crate::readmappers::minimap::MinimapConfig;
 use crate::readmappers::{IndexStrategy, Queries, Reference};
 
 use anyhow::{bail, Result};
@@ -26,6 +27,7 @@ pub enum Benchmark {
     IndexBuild,
     IntervalOptimization,
     MaxAnchors,
+    Minimap,
     PexSeedErrors,
     PexTreeBuilding,
     ProblemQuery,
@@ -53,6 +55,7 @@ impl Benchmark {
             Benchmark::IndexBuild => index_build(suite_config),
             Benchmark::IntervalOptimization => interval_optimization(suite_config),
             Benchmark::MaxAnchors => max_anchors(suite_config),
+            Benchmark::Minimap => minimap(suite_config),
             Benchmark::PexSeedErrors => pex_seed_errors(suite_config),
             Benchmark::PexTreeBuilding => pex_tree_building(suite_config),
             Benchmark::Profile => profile(suite_config),
@@ -342,6 +345,29 @@ fn max_anchors(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
     res.plot_seed_stats(suite_config);
     res.plot_anchor_stats(suite_config);
 
+    Ok(())
+}
+
+fn minimap(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+    let name = "vs_minimap";
+    let folder = BenchmarkFolder::new(&suite_config.output_folder, name);
+    let floxer_res =
+        FloxerConfig::default().run(&folder, "floxer", suite_config, ProfileConfig::Off)?;
+
+    let minimap_res = MinimapConfig::default().run(&folder, suite_config)?;
+
+    plots::plot_resource_metrics(
+        name,
+        [
+            (&floxer_res.resource_metrics, "floxer"),
+            (&minimap_res.map_resource_metrics, "minimap"),
+        ]
+        .into_iter(),
+        &folder,
+        suite_config,
+    );
+
+    // TODO create function that runs and parses compare_readmapper_output and creates nice visualizations (sankey + more basic)
     Ok(())
 }
 
