@@ -1,9 +1,15 @@
-use std::path::Path;
+use core::str;
+use std::{fs, path::Path, process::Command};
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use rust_htslib::bam::{self, record::Aux, Read};
+use serde::Deserialize;
 
-pub fn analyze_alignments<P: AsRef<Path>>(mapped_reads_path: P) -> Result<MappedReadsStats> {
+use crate::{config::BenchmarkSuiteConfig, folder_structure::BenchmarkFolder};
+
+pub fn analyze_alignments_simple<P: AsRef<Path>>(
+    mapped_reads_path: P,
+) -> Result<SimpleMappedReadsStats> {
     let mut bam = bam::Reader::from_path(mapped_reads_path.as_ref())?;
 
     let mut primary_alignment_edit_distances = Vec::new();
@@ -36,14 +42,83 @@ pub fn analyze_alignments<P: AsRef<Path>>(mapped_reads_path: P) -> Result<Mapped
         }
     }
 
-    Ok(MappedReadsStats {
+    Ok(SimpleMappedReadsStats {
         num_mapped: primary_alignment_edit_distances.len() as i32,
         primary_alignment_edit_distances,
     })
 }
 
 #[derive(Debug, Clone)]
-pub struct MappedReadsStats {
+pub struct SimpleMappedReadsStats {
     pub num_mapped: i32,
     pub primary_alignment_edit_distances: Vec<i32>,
+}
+
+// runs a C++ program to do this comparison that I wrote earlier
+pub fn analyze_alignments_detailed_comparison(
+    mapped_reads_path_floxer: impl AsRef<Path>,
+    mapped_reads_path_minimap: impl AsRef<Path>,
+    floxer_query_error_rate: f64,
+    benchmark_folder: &BenchmarkFolder,
+    suite_config: &BenchmarkSuiteConfig,
+) -> Result<DetailedMappedReadsComparison> {
+    let output = Command::new(&suite_config.compare_aligner_outputs_binary)
+        .arg("--new")
+        .arg(mapped_reads_path_floxer.as_ref())
+        .arg("--reference")
+        .arg(mapped_reads_path_minimap.as_ref())
+        .arg("--error-rate")
+        .arg(floxer_query_error_rate.to_string())
+        .output()?;
+
+    if !output.status.success() {
+        bail!(
+            "compare_aligner_outputs failed with the following stderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    let result_str = str::from_utf8(&output.stdout)?;
+    let mut result_file_path = benchmark_folder.get().to_owned();
+    result_file_path.push("detailed_aligner_comparison.toml");
+
+    fs::write(result_file_path, result_str)?;
+
+    toml::from_str(result_str).context("compare_aligner_outputs stdout deserialize")
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DetailedMappedReadsComparison {
+    pub general_stats: FullStats,
+    pub floxer_stats_if_floxer_mapped: ScopedStats,
+    pub minimap_stats_if_minimap_mapped: ScopedStats,
+    pub minimap_stats_if_both_mapped: ScopedStats,
+    pub minimap_stats_if_only_minimap_mapped: ScopedStats,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FullStats {
+    pub number_of_queries: usize,
+    pub both_mapped: usize,
+    pub both_unmapped: usize,
+    pub floxer_mapped: usize,
+    pub floxer_unmapped: usize,
+    pub minimap_mapped: usize,
+    pub minimap_unmapped: usize,
+    pub floxer_unmapped_and_minimap_mapped: usize,
+    pub minimap_unmapped_and_floxer_mapped: usize,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ScopedStats {
+    pub num_queries: usize,
+    pub primary_chimeric: usize,
+    pub primary_linear_basic: usize,
+    pub primary_linear_clipped: usize,
+    pub primary_high_edit_distance: usize,
+    pub primary_inversion: usize,
+    pub multiple_mapping: usize,
+    pub primary_not_basic_secondary_basic: usize,
+    pub average_longest_indel: f64,
+    pub average_error_rate_of_primary_basic_alignments: f64,
 }

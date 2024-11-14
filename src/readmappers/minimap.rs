@@ -1,6 +1,10 @@
 use std::{fs, process::Command};
 
-use crate::{config::BenchmarkSuiteConfig, folder_structure::BenchmarkFolder};
+use crate::{
+    analyze_mapped_reads::{analyze_alignments_simple, SimpleMappedReadsStats},
+    config::BenchmarkSuiteConfig,
+    folder_structure::BenchmarkFolder,
+};
 
 use super::{IndexStrategy, Queries, Reference, ResourceMetrics};
 use anyhow::{bail, Result};
@@ -86,7 +90,7 @@ impl MinimapConfig {
         };
 
         let mut output_path = output_folder.clone();
-        output_path.push("mapped_reads.bam");
+        output_path.push("mapped_reads.sam");
 
         let mut map_timing_path = output_folder.clone();
         map_timing_path.push("timing.toml");
@@ -94,12 +98,15 @@ impl MinimapConfig {
         let mut map_command = Command::new("/usr/bin/time");
         super::add_time_args(&mut map_command, &map_timing_path);
 
-        map_command.arg(&suite_config.readmapper_binaries.minimap);
-        map_command.arg("-a");
-        map_command.arg(&index_path);
-        map_command.arg(self.queries.path(suite_config));
-        map_command.arg("-t");
-        map_command.arg(self.num_threads.to_string());
+        map_command
+            .arg(&suite_config.readmapper_binaries.minimap)
+            .arg("-a")
+            .arg(&index_path)
+            .arg(self.queries.path(suite_config))
+            .arg("-t")
+            .arg(self.num_threads.to_string())
+            .arg("-o")
+            .arg(&output_path);
 
         let minimap_map_proc_output = map_command.output()?;
         if !minimap_map_proc_output.status.success() {
@@ -109,12 +116,13 @@ impl MinimapConfig {
             );
         }
 
-        fs::write(output_path, &minimap_map_proc_output.stdout)?;
-
         let map_timings_file_str = fs::read_to_string(map_timing_path)?;
         let map_resource_metrics: ResourceMetrics = toml::from_str(&map_timings_file_str)?;
 
+        let mapped_read_stats = analyze_alignments_simple(output_path)?;
+
         Ok(MinimapRunResult {
+            mapped_read_stats,
             map_resource_metrics,
             index_resource_metrics,
         })
@@ -122,6 +130,7 @@ impl MinimapConfig {
 }
 
 pub struct MinimapRunResult {
+    pub mapped_read_stats: SimpleMappedReadsStats,
     pub map_resource_metrics: ResourceMetrics,
     pub index_resource_metrics: Option<ResourceMetrics>,
 }

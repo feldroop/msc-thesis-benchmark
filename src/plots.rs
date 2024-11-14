@@ -1,7 +1,7 @@
 use std::fs;
 
 use crate::{
-    analyze_mapped_reads::MappedReadsStats,
+    analyze_mapped_reads::SimpleMappedReadsStats,
     config::BenchmarkSuiteConfig,
     folder_structure::BenchmarkFolder,
     readmappers::{floxer::HistogramData, ResourceMetrics},
@@ -21,7 +21,7 @@ static GRID_OUTERMOST_OFFSET: usize = 6;
 
 pub fn plot_resource_metrics<'a>(
     benchmark_name: &str,
-    metrics_and_names_of_runs: impl Iterator<Item = (&'a ResourceMetrics, &'a str)>,
+    metrics_and_names_of_runs: impl IntoIterator<Item = (&'a ResourceMetrics, &'a str)>,
     benchmark_folder: &BenchmarkFolder,
     suite_config: &BenchmarkSuiteConfig,
 ) {
@@ -39,14 +39,10 @@ pub fn plot_resource_metrics<'a>(
                 .grid_index(0),
         )
         .y_axis(Axis::new().name("Seconds").grid_index(0))
-        .x_axis(
-            Axis::new()
-                .data(vec!["Peak Memory Usage", "Average Memory Usage"])
-                .grid_index(1),
-        )
+        .x_axis(Axis::new().data(vec!["Peak Memory Usage"]).grid_index(1))
         .y_axis(Axis::new().name("Kilobytes").grid_index(1));
 
-    for (metrics, name) in metrics_and_names_of_runs {
+    for (metrics, name) in metrics_and_names_of_runs.into_iter() {
         chart = chart
             .series(
                 Bar::new()
@@ -57,17 +53,19 @@ pub fn plot_resource_metrics<'a>(
                     ])
                     .name(name)
                     .x_axis_index(0)
-                    .y_axis_index(0),
+                    .y_axis_index(0)
+                    .label(Label::new().show(true).position(LabelPosition::Top)),
             )
             .series(
                 Bar::new()
                     .data(vec![
                         metrics.peak_memory_kilobytes as i64,
-                        metrics.average_memory_kilobytes as i64,
+                        // metrics.average_memory_kilobytes as i64, <-- seems to be not available and is not as important
                     ])
                     .name(name)
                     .x_axis_index(1)
-                    .y_axis_index(1),
+                    .y_axis_index(1)
+                    .label(Label::new().show(true).position(LabelPosition::Top)),
             );
     }
 
@@ -82,7 +80,7 @@ pub fn plot_resource_metrics<'a>(
 }
 
 pub fn plot_mapped_reads_stats<'a, S>(
-    iter: impl IntoIterator<Item = &'a MappedReadsStats>,
+    iter: impl IntoIterator<Item = &'a SimpleMappedReadsStats>,
     title: &str,
     instance_names: impl IntoIterator<Item = S>,
     benchmark_folder: &BenchmarkFolder,

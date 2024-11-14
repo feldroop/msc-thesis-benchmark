@@ -1,5 +1,5 @@
 use crate::{
-    analyze_mapped_reads::{analyze_alignments, MappedReadsStats},
+    analyze_mapped_reads::{analyze_alignments_simple, SimpleMappedReadsStats},
     benchmarks::ProfileConfig,
     config::BenchmarkSuiteConfig,
     folder_structure::BenchmarkFolder,
@@ -64,11 +64,13 @@ pub struct FloxerAlgorithmConfig {
     pub num_threads: u16,
 }
 
+pub const DEFAULT_ERROR_RATE: f64 = 0.09;
+
 impl Default for FloxerAlgorithmConfig {
     fn default() -> Self {
         FloxerAlgorithmConfig {
             index_strategy: IndexStrategy::ReadFromDiskIfStored,
-            query_errors: QueryErrors::Rate(0.09),
+            query_errors: QueryErrors::Rate(DEFAULT_ERROR_RATE),
             pex_seed_errors: 2,
             max_num_anchors: 100,
             anchor_group_order: AnchorGroupOrder::CountFirst,
@@ -256,7 +258,7 @@ impl FloxerConfig {
         let timings_file_str = fs::read_to_string(timing_path)?;
         let resource_metrics: ResourceMetrics = toml::from_str(&timings_file_str)?;
 
-        let mapped_read_stats = analyze_alignments(output_path)?;
+        let mapped_read_stats = analyze_alignments_simple(output_path)?;
 
         Ok(FloxerRunResult {
             benchmark_instance_name: self.name.clone().unwrap_or_else(|| String::from("floxer")),
@@ -334,7 +336,7 @@ pub struct FloxerRunResult {
     pub benchmark_instance_name: String,
     pub stats: FloxerStats,
     pub resource_metrics: ResourceMetrics,
-    pub mapped_read_stats: MappedReadsStats,
+    pub mapped_read_stats: SimpleMappedReadsStats,
 }
 
 #[derive(Debug, Deserialize)]

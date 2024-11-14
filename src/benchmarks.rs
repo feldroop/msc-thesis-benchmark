@@ -1,12 +1,13 @@
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use crate::analyze_mapped_reads::analyze_alignments_detailed_comparison;
 use crate::config::BenchmarkSuiteConfig;
 use crate::folder_structure::BenchmarkFolder;
 use crate::plots;
 use crate::readmappers::floxer::{
-    AnchorGroupOrder, FloxerAlgorithmConfig, FloxerConfig, FloxerRunResult, IntervalOptimization,
-    PexTreeConstruction, QueryErrors, VerificationAlgorithm,
+    self, AnchorGroupOrder, FloxerAlgorithmConfig, FloxerConfig, FloxerRunResult,
+    IntervalOptimization, PexTreeConstruction, QueryErrors, VerificationAlgorithm,
 };
 use crate::readmappers::minimap::MinimapConfig;
 use crate::readmappers::{IndexStrategy, Queries, Reference};
@@ -294,16 +295,44 @@ fn extra_verification_ratio(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
 }
 
 fn index_build(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    let _ = FloxerParameterBenchmark::from_iter([FloxerConfig {
+    let _ = FloxerParameterBenchmark::from_iter([])
+        .name("index_build")
+        .run(suite_config)?;
+
+    let name = "index_build";
+    let folder = BenchmarkFolder::new(&suite_config.output_folder, name);
+    let floxer_res = FloxerConfig {
         algorithm_config: FloxerAlgorithmConfig {
             index_strategy: IndexStrategy::AlwaysRebuild,
             ..Default::default()
         },
+        name: Some(String::from("floxer")),
         queries: Queries::Debug, // here we only care about the index building and skip the queries
         ..Default::default()
-    }])
-    .name("index_build")
-    .run(suite_config)?;
+    }
+    .run(&folder, name, suite_config, ProfileConfig::Off)?;
+
+    let minimap_res = MinimapConfig {
+        index_strategy: IndexStrategy::AlwaysRebuild,
+        queries: Queries::Debug,
+        ..Default::default()
+    }
+    .run(&folder, suite_config)?;
+
+    plots::plot_resource_metrics(
+        name,
+        [
+            (&floxer_res.resource_metrics, "floxer"),
+            (
+                &minimap_res
+                    .index_resource_metrics
+                    .expect("minimap index resource metrics"),
+                "minimap",
+            ),
+        ],
+        &folder,
+        suite_config,
+    );
 
     Ok(())
 }
@@ -349,7 +378,7 @@ fn max_anchors(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
 }
 
 fn minimap(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    let name = "vs_minimap";
+    let name = "minimap";
     let folder = BenchmarkFolder::new(&suite_config.output_folder, name);
     let floxer_res = FloxerConfig {
         name: Some(String::from("floxer")),
@@ -364,13 +393,29 @@ fn minimap(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
         [
             (&floxer_res.resource_metrics, "floxer"),
             (&minimap_res.map_resource_metrics, "minimap"),
-        ]
-        .into_iter(),
+        ],
         &folder,
         suite_config,
     );
 
-    // TODO create function that runs and parses compare_readmapper_output and creates nice visualizations (sankey + more basic)
+    let mut floxer_mapped_reads_path = folder.get().to_owned();
+    floxer_mapped_reads_path.push("floxer");
+    floxer_mapped_reads_path.push("mapped_reads.bam");
+
+    let mut minimap_mapped_reads_path = folder.get().to_owned();
+    minimap_mapped_reads_path.push("minimap");
+    minimap_mapped_reads_path.push("mapped_reads.sam");
+
+    let aligner_comparison = analyze_alignments_detailed_comparison(
+        &floxer_mapped_reads_path,
+        &minimap_mapped_reads_path,
+        floxer::DEFAULT_ERROR_RATE,
+        &folder,
+        suite_config,
+    )?;
+
+    // TODO function that creates nice visualizations (sankey + more basic)
+
     Ok(())
 }
 
@@ -451,18 +496,19 @@ fn problem_query(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
 }
 
 fn query_error_rate(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    let res = FloxerParameterBenchmark::from_iter([0.05, 0.07, 0.09, 0.11, 0.13].into_iter().map(
-        |query_error_ratio| FloxerConfig {
-            algorithm_config: FloxerAlgorithmConfig {
-                query_errors: QueryErrors::Rate(query_error_ratio),
+    let res =
+        FloxerParameterBenchmark::from_iter([0.05, 0.07, 0.09, 0.11, 0.13, 0.15].into_iter().map(
+            |query_error_ratio| FloxerConfig {
+                algorithm_config: FloxerAlgorithmConfig {
+                    query_errors: QueryErrors::Rate(query_error_ratio),
+                    ..Default::default()
+                },
+                name: Some(format!("query_error_rate_{query_error_ratio}").replace('.', "_")),
                 ..Default::default()
             },
-            name: Some(format!("query_error_rate_{query_error_ratio}").replace('.', "_")),
-            ..Default::default()
-        },
-    ))
-    .name("query_error_rate")
-    .run(suite_config)?;
+        ))
+        .name("query_error_rate")
+        .run(suite_config)?;
 
     res.plot_seed_stats(suite_config);
     res.plot_anchor_stats(suite_config);
@@ -471,7 +517,7 @@ fn query_error_rate(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
 }
 
 fn threads(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    FloxerParameterBenchmark::from_iter([4, 8, 12, 16].into_iter().map(|num_threads| {
+    FloxerParameterBenchmark::from_iter([16, 32, 48, 64].into_iter().map(|num_threads| {
         FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
                 num_threads,
@@ -481,7 +527,7 @@ fn threads(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
             ..Default::default()
         }
     }))
-    .name("num_threads")
+    .name("threads")
     .run(suite_config)?;
 
     Ok(())

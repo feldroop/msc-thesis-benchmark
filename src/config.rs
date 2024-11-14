@@ -8,6 +8,7 @@ use std::{fs, path::PathBuf};
 #[derive(Deserialize)]
 pub struct BenchmarkSuiteConfig {
     pub output_folder: PathBuf,
+    pub compare_aligner_outputs_binary: PathBuf,
     pub readmapper_binaries: ReadmapperBinaries,
     pub reference_paths: ReferencePaths,
     pub query_paths: QueryPaths,

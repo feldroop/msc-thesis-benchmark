@@ -10,10 +10,9 @@ pub mod minimap;
 const TIME_TOOL_FORMAT_STRING: &str = "wall_clock_seconds = %e
 user_cpu_seconds = %U
 system_cpu_seconds = %S
-peak_memory_kilobytes = %M
-average_memory_kilobytes = %K";
+peak_memory_kilobytes = %M";
 
-const NUM_THREADS_FOR_READMAPPERS: u16 = 64;
+const NUM_THREADS_FOR_READMAPPERS: u16 = 16;
 
 fn add_time_args(command: &mut Command, timing_path: &Path) {
     command
@@ -96,5 +95,4 @@ pub struct ResourceMetrics {
     pub user_cpu_seconds: f64,
     pub system_cpu_seconds: f64,
     pub peak_memory_kilobytes: usize,
-    pub average_memory_kilobytes: usize,
 }
