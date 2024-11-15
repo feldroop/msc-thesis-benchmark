@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::analyze_mapped_reads::analyze_alignments_detailed_comparison;
+use crate::cli::BenchmarkConfig;
 use crate::config::BenchmarkSuiteConfig;
 use crate::folder_structure::BenchmarkFolder;
 use crate::plots;
@@ -46,24 +47,38 @@ pub enum ProfileConfig {
 }
 
 impl Benchmark {
-    pub fn run(&self, suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+    pub fn run(
+        &self,
+        suite_config: &BenchmarkSuiteConfig,
+        benchmark_config: &BenchmarkConfig,
+    ) -> Result<()> {
         match *self {
-            Benchmark::AllowedIntervalOverlapRatio => allowed_interval_overlap_ratio(suite_config),
-            Benchmark::AnchorGroupOrder => anchor_group_order(suite_config),
-            Benchmark::AnchorsPerVerificationTask => anchors_per_verification_task(suite_config),
-            Benchmark::Debug => debug_benchmark(suite_config),
-            Benchmark::ExtraVerificationRatio => extra_verification_ratio(suite_config),
-            Benchmark::IndexBuild => index_build(suite_config),
-            Benchmark::IntervalOptimization => interval_optimization(suite_config),
-            Benchmark::MaxAnchors => max_anchors(suite_config),
-            Benchmark::Minimap => minimap(suite_config),
-            Benchmark::PexSeedErrors => pex_seed_errors(suite_config),
-            Benchmark::PexTreeBuilding => pex_tree_building(suite_config),
-            Benchmark::Profile => profile(suite_config),
-            Benchmark::ProblemQuery => problem_query(suite_config),
-            Benchmark::QueryErrorRate => query_error_rate(suite_config),
-            Benchmark::Threads => threads(suite_config),
-            Benchmark::VerificationAlgorithm => verification_algorithm(suite_config),
+            Benchmark::AllowedIntervalOverlapRatio => {
+                allowed_interval_overlap_ratio(suite_config, benchmark_config)
+            }
+            Benchmark::AnchorGroupOrder => anchor_group_order(suite_config, benchmark_config),
+            Benchmark::AnchorsPerVerificationTask => {
+                anchors_per_verification_task(suite_config, benchmark_config)
+            }
+            Benchmark::Debug => debug_benchmark(suite_config, benchmark_config),
+            Benchmark::ExtraVerificationRatio => {
+                extra_verification_ratio(suite_config, benchmark_config)
+            }
+            Benchmark::IndexBuild => index_build(suite_config, benchmark_config),
+            Benchmark::IntervalOptimization => {
+                interval_optimization(suite_config, benchmark_config)
+            }
+            Benchmark::MaxAnchors => max_anchors(suite_config, benchmark_config),
+            Benchmark::Minimap => minimap(suite_config, benchmark_config),
+            Benchmark::PexSeedErrors => pex_seed_errors(suite_config, benchmark_config),
+            Benchmark::PexTreeBuilding => pex_tree_building(suite_config, benchmark_config),
+            Benchmark::Profile => profile(suite_config, benchmark_config),
+            Benchmark::ProblemQuery => problem_query(suite_config, benchmark_config),
+            Benchmark::QueryErrorRate => query_error_rate(suite_config, benchmark_config),
+            Benchmark::Threads => threads(suite_config, benchmark_config),
+            Benchmark::VerificationAlgorithm => {
+                verification_algorithm(suite_config, benchmark_config)
+            }
         }
     }
 }
@@ -71,6 +86,7 @@ impl Benchmark {
 pub fn run_benchmarks<I: IntoIterator<Item = Benchmark>>(
     benchmarks: I,
     suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
 ) -> Result<()> {
     let skip_for_now: HashSet<_> = [Benchmark::VerificationAlgorithm].into_iter().collect();
 
@@ -80,7 +96,7 @@ pub fn run_benchmarks<I: IntoIterator<Item = Benchmark>>(
             continue;
         }
 
-        if let Err(err) = benchmark.run(suite_config) {
+        if let Err(err) = benchmark.run(suite_config, benchmark_config) {
             println!("{}", err);
             num_error_runs += 1;
         } else {
@@ -95,8 +111,11 @@ pub fn run_benchmarks<I: IntoIterator<Item = Benchmark>>(
     Ok(())
 }
 
-pub fn run_all(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    run_benchmarks(Benchmark::iter(), suite_config)
+pub fn run_all(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
+    run_benchmarks(Benchmark::iter(), suite_config, benchmark_config)
 }
 
 struct BenchmarkResult {
@@ -188,7 +207,10 @@ impl BenchmarkResult {
     }
 }
 
-fn allowed_interval_overlap_ratio(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+fn allowed_interval_overlap_ratio(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
     let res = FloxerParameterBenchmark::from_iter([1.0, 0.95, 0.9, 0.5, 0.01].into_iter().map(
         |allowed_interval_overlap_ratio| {
             FloxerConfig {
@@ -200,19 +222,22 @@ fn allowed_interval_overlap_ratio(suite_config: &BenchmarkSuiteConfig) -> Result
                     format!("allowed_interval_overlap_ratio_{allowed_interval_overlap_ratio}")
                         .replace('.', "_"),
                 ),
-                ..Default::default()
+                ..From::from(benchmark_config)
             }
         },
     ))
     .name("allowed_interval_overlap_ratio")
-    .run(suite_config)?;
+    .run(suite_config, benchmark_config)?;
 
     res.plot_alignment_stats(suite_config);
 
     Ok(())
 }
 
-fn anchor_group_order(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+fn anchor_group_order(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
     let res =
         FloxerParameterBenchmark::from_iter(AnchorGroupOrder::iter().map(|anchor_group_order| {
             FloxerConfig {
@@ -221,18 +246,21 @@ fn anchor_group_order(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
                     ..Default::default()
                 },
                 name: Some(anchor_group_order.to_string()),
-                ..Default::default()
+                ..From::from(benchmark_config)
             }
         }))
         .name("anchor_group_order")
-        .run(suite_config)?;
+        .run(suite_config, benchmark_config)?;
 
     res.plot_anchor_stats(suite_config);
 
     Ok(())
 }
 
-fn anchors_per_verification_task(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+fn anchors_per_verification_task(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
     FloxerParameterBenchmark::from_iter([3000, 10_000, 1_000_000_000].into_iter().map(
         |num_anchors_per_verification_task| FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
@@ -242,20 +270,25 @@ fn anchors_per_verification_task(suite_config: &BenchmarkSuiteConfig) -> Result<
             name: Some(format!(
                 "anchors_per_task_{num_anchors_per_verification_task}"
             )),
-            ..Default::default()
+            ..From::from(benchmark_config)
         },
     ))
     .name("anchors_per_verification_task")
-    .run(suite_config)?;
+    .run(suite_config, benchmark_config)?;
 
     Ok(())
 }
 
-fn debug_benchmark(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+fn debug_benchmark(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
+    let benchmark_config = benchmark_config
+        .with_reference(Reference::Debug)
+        .with_queries(Queries::Debug);
+
     let _ = FloxerParameterBenchmark::from_iter(PexTreeConstruction::iter().map(
         |pex_tree_construction| FloxerConfig {
-            reference: Reference::Debug,
-            queries: Queries::Debug,
             algorithm_config: FloxerAlgorithmConfig {
                 pex_tree_construction,
                 extra_verification_ratio: 2.0,
@@ -265,15 +298,19 @@ fn debug_benchmark(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
                 ..Default::default()
             },
             name: Some(pex_tree_construction.to_string()),
+            ..From::from(&benchmark_config)
         },
     ))
     .name("debug")
-    .run(suite_config)?;
+    .run(suite_config, &benchmark_config)?;
 
     Ok(())
 }
 
-fn extra_verification_ratio(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+fn extra_verification_ratio(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
     let res = FloxerParameterBenchmark::from_iter([0.01, 0.02, 0.05, 0.1, 0.2].into_iter().map(
         |extra_verification_ratio| FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
@@ -283,39 +320,38 @@ fn extra_verification_ratio(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
             name: Some(
                 format!("extra_verification_ratio_{extra_verification_ratio}").replace('.', "_"),
             ),
-            ..Default::default()
+            ..From::from(benchmark_config)
         },
     ))
     .name("extra_verification_ratio")
-    .run(suite_config)?;
+    .run(suite_config, benchmark_config)?;
 
     res.plot_alignment_stats(suite_config);
 
     Ok(())
 }
 
-fn index_build(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    let _ = FloxerParameterBenchmark::from_iter([])
-        .name("index_build")
-        .run(suite_config)?;
+fn index_build(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
+    let benchmark_config = benchmark_config.with_queries(Queries::Debug); // here we only care about the index building and skip the queries
 
     let name = "index_build";
-    let folder = BenchmarkFolder::new(&suite_config.output_folder, name);
+    let folder = BenchmarkFolder::new(&suite_config.output_folder, name, &benchmark_config);
     let floxer_res = FloxerConfig {
         algorithm_config: FloxerAlgorithmConfig {
             index_strategy: IndexStrategy::AlwaysRebuild,
             ..Default::default()
         },
         name: Some(String::from("floxer")),
-        queries: Queries::Debug, // here we only care about the index building and skip the queries
-        ..Default::default()
+        ..From::from(&benchmark_config)
     }
     .run(&folder, name, suite_config, ProfileConfig::Off)?;
 
     let minimap_res = MinimapConfig {
         index_strategy: IndexStrategy::AlwaysRebuild,
-        queries: Queries::Debug,
-        ..Default::default()
+        ..From::from(&benchmark_config)
     }
     .run(&folder, suite_config)?;
 
@@ -337,27 +373,35 @@ fn index_build(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
     Ok(())
 }
 
-fn interval_optimization(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+// Should usually only be run with small query sets
+fn interval_optimization(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
+    let benchmark_config = benchmark_config.with_smaller_queries();
+
     let res = FloxerParameterBenchmark::from_iter(IntervalOptimization::iter().map(
         |interval_optimization| FloxerConfig {
-            queries: Queries::HumanWgsNanoporeSmall,
             algorithm_config: FloxerAlgorithmConfig {
                 interval_optimization,
                 ..Default::default()
             },
             name: Some(interval_optimization.to_string()),
-            ..Default::default()
+            ..From::from(&benchmark_config)
         },
     ))
     .name("interval_optimization")
-    .run(suite_config)?;
+    .run(suite_config, &benchmark_config)?;
 
     res.plot_alignment_stats(suite_config);
 
     Ok(())
 }
 
-fn max_anchors(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+fn max_anchors(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
     let res = FloxerParameterBenchmark::from_iter([20, 50, 100, 200].into_iter().map(
         |max_num_anchors| FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
@@ -365,11 +409,11 @@ fn max_anchors(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
                 ..Default::default()
             },
             name: Some(format!("max_anchors_{max_num_anchors}")),
-            ..Default::default()
+            ..From::from(benchmark_config)
         },
     ))
     .name("max_anchors")
-    .run(suite_config)?;
+    .run(suite_config, benchmark_config)?;
 
     res.plot_seed_stats(suite_config);
     res.plot_anchor_stats(suite_config);
@@ -377,16 +421,16 @@ fn max_anchors(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
     Ok(())
 }
 
-fn minimap(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+fn minimap(suite_config: &BenchmarkSuiteConfig, benchmark_config: &BenchmarkConfig) -> Result<()> {
     let name = "minimap";
-    let folder = BenchmarkFolder::new(&suite_config.output_folder, name);
+    let folder = BenchmarkFolder::new(&suite_config.output_folder, name, benchmark_config);
     let floxer_res = FloxerConfig {
         name: Some(String::from("floxer")),
-        ..Default::default()
+        ..From::from(benchmark_config)
     }
     .run(&folder, name, suite_config, ProfileConfig::Off)?;
 
-    let minimap_res = MinimapConfig::default().run(&folder, suite_config)?;
+    let minimap_res = MinimapConfig::from(benchmark_config).run(&folder, suite_config)?;
 
     plots::plot_resource_metrics(
         name,
@@ -419,17 +463,20 @@ fn minimap(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
     Ok(())
 }
 
-fn pex_seed_errors(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+fn pex_seed_errors(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
     let res = FloxerParameterBenchmark::from_iter((0..4).map(|pex_seed_errors| FloxerConfig {
         algorithm_config: FloxerAlgorithmConfig {
             pex_seed_errors,
             ..Default::default()
         },
         name: Some(format!("pex_seed_errors_{pex_seed_errors}")),
-        ..Default::default()
+        ..From::from(benchmark_config)
     }))
     .name("pex_seed_errors")
-    .run(suite_config)?;
+    .run(suite_config, benchmark_config)?;
 
     res.plot_seed_stats(suite_config);
     res.plot_anchor_stats(suite_config);
@@ -437,7 +484,10 @@ fn pex_seed_errors(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
     Ok(())
 }
 
-fn pex_tree_building(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+fn pex_tree_building(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
     let res = FloxerParameterBenchmark::from_iter(
         [
             PexTreeConstruction::TopDown,
@@ -457,11 +507,11 @@ fn pex_tree_building(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
                 "{}_{}_seed_errors",
                 pex_tree_construction, pex_seed_errors
             )),
-            ..Default::default()
+            ..From::from(benchmark_config)
         }),
     )
     .name("pex_tree_building")
-    .run(suite_config)?;
+    .run(suite_config, benchmark_config)?;
 
     res.plot_seed_stats(suite_config);
     res.plot_anchor_stats(suite_config);
@@ -469,33 +519,40 @@ fn pex_tree_building(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
     Ok(())
 }
 
-fn profile(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    let _ = FloxerParameterBenchmark::from_iter([Default::default()])
+fn profile(suite_config: &BenchmarkSuiteConfig, benchmark_config: &BenchmarkConfig) -> Result<()> {
+    let _ = FloxerParameterBenchmark::from_iter([From::from(benchmark_config)])
         .name("profile")
         .with_profile()
-        .run(suite_config);
+        .run(suite_config, benchmark_config);
 
     Ok(())
 }
 
-fn problem_query(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+fn problem_query(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
+    let benchmark_config = benchmark_config.with_queries(Queries::ProblemQuery);
+
     let _ = FloxerParameterBenchmark::from_iter([FloxerConfig {
-        queries: Queries::ProblemQuery,
         algorithm_config: FloxerAlgorithmConfig {
             pex_seed_errors: 1,
             allowed_interval_overlap_ratio: 0.8,
             ..Default::default()
         },
-        ..Default::default()
+        ..From::from(&benchmark_config)
     }])
     .name("problem_query")
     .with_profile()
-    .run(suite_config);
+    .run(suite_config, &benchmark_config);
 
     Ok(())
 }
 
-fn query_error_rate(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+fn query_error_rate(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
     let res =
         FloxerParameterBenchmark::from_iter([0.05, 0.07, 0.09, 0.11, 0.13, 0.15].into_iter().map(
             |query_error_ratio| FloxerConfig {
@@ -504,11 +561,11 @@ fn query_error_rate(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
                     ..Default::default()
                 },
                 name: Some(format!("query_error_rate_{query_error_ratio}").replace('.', "_")),
-                ..Default::default()
+                ..From::from(benchmark_config)
             },
         ))
         .name("query_error_rate")
-        .run(suite_config)?;
+        .run(suite_config, benchmark_config)?;
 
     res.plot_seed_stats(suite_config);
     res.plot_anchor_stats(suite_config);
@@ -516,37 +573,41 @@ fn query_error_rate(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
     Ok(())
 }
 
-fn threads(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
-    FloxerParameterBenchmark::from_iter([16, 32, 48, 64].into_iter().map(|num_threads| {
+fn threads(suite_config: &BenchmarkSuiteConfig, benchmark_config: &BenchmarkConfig) -> Result<()> {
+    FloxerParameterBenchmark::from_iter([8, 16, 20, 24, 32].into_iter().map(|num_threads| {
         FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
                 num_threads,
                 ..Default::default()
             },
             name: Some(format!("num_threads_{num_threads}")),
-            ..Default::default()
+            ..From::from(benchmark_config)
         }
     }))
     .name("threads")
-    .run(suite_config)?;
+    .run(suite_config, benchmark_config)?;
 
     Ok(())
 }
 
-fn verification_algorithm(suite_config: &BenchmarkSuiteConfig) -> Result<()> {
+fn verification_algorithm(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
+    let benchmark_config = benchmark_config.with_smaller_queries();
+
     let res = FloxerParameterBenchmark::from_iter(VerificationAlgorithm::iter().map(
         |verification_algorithm| FloxerConfig {
-            queries: Queries::HumanWgsNanoporeSmall,
             algorithm_config: FloxerAlgorithmConfig {
                 verification_algorithm,
                 ..Default::default()
             },
             name: Some(verification_algorithm.to_string()),
-            ..Default::default()
+            ..From::from(&benchmark_config)
         },
     ))
     .name("verification_algorithm")
-    .run(suite_config)?;
+    .run(suite_config, &benchmark_config)?;
 
     res.plot_alignment_stats(suite_config);
 
@@ -584,9 +645,16 @@ impl FloxerParameterBenchmark {
         self
     }
 
-    fn run(&self, suite_config: &BenchmarkSuiteConfig) -> Result<BenchmarkResult> {
-        let benchmark_folder =
-            BenchmarkFolder::new(&suite_config.output_folder, &self.benchmark_name);
+    fn run(
+        &self,
+        suite_config: &BenchmarkSuiteConfig,
+        benchmark_config: &BenchmarkConfig,
+    ) -> Result<BenchmarkResult> {
+        let benchmark_folder = BenchmarkFolder::new(
+            &suite_config.output_folder,
+            &self.benchmark_name,
+            benchmark_config,
+        );
 
         let mut floxer_results = Vec::new();
         let mut instance_names = Vec::new();

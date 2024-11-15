@@ -12,7 +12,7 @@ use clap::Parser;
 use config::BenchmarkSuiteConfig;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let args = cli::Args::parse();
+    let args = cli::CliArgs::parse();
 
     let config_file_str = fs::read_to_string(&args.config_file)?;
     let suite_config: BenchmarkSuiteConfig = toml::from_str(&config_file_str)?;
@@ -20,9 +20,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     suite_config.setup()?;
 
     if let Some(benchmarks) = args.benchmarks {
-        benchmarks::run_benchmarks(benchmarks, &suite_config)?;
+        benchmarks::run_benchmarks(benchmarks, &suite_config, &args.benchmark_config)?;
     } else {
-        benchmarks::run_all(&suite_config)?;
+        benchmarks::run_all(&suite_config, &args.benchmark_config)?;
     }
 
     Ok(())

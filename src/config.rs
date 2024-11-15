@@ -24,6 +24,7 @@ pub struct ReadmapperBinaries {
 pub struct ReferencePaths {
     pub human_genome_hg38: PathBuf,
     pub debug: PathBuf,
+    pub simulated: PathBuf,
 }
 
 #[derive(Deserialize)]
@@ -32,6 +33,8 @@ pub struct QueryPaths {
     pub human_wgs_nanopore_small: PathBuf,
     pub debug: PathBuf,
     pub problem_query: PathBuf,
+    pub simulated_simple: PathBuf,
+    pub simulated_pbsim: PathBuf,
 }
 
 impl BenchmarkSuiteConfig {

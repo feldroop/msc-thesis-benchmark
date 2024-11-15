@@ -1,6 +1,7 @@
 use crate::{
     analyze_mapped_reads::{analyze_alignments_simple, SimpleMappedReadsStats},
     benchmarks::ProfileConfig,
+    cli::BenchmarkConfig,
     config::BenchmarkSuiteConfig,
     folder_structure::BenchmarkFolder,
 };
@@ -87,12 +88,23 @@ impl Default for FloxerAlgorithmConfig {
 
 // API to configure a floxer benchmark run.
 // the output path will be determined from the other parameters
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct FloxerConfig {
     pub name: Option<String>,
     pub reference: Reference,
     pub queries: Queries,
     pub algorithm_config: FloxerAlgorithmConfig,
+}
+
+impl From<&BenchmarkConfig> for FloxerConfig {
+    fn from(value: &BenchmarkConfig) -> Self {
+        FloxerConfig {
+            name: None,
+            reference: value.reference,
+            queries: value.queries,
+            algorithm_config: Default::default(),
+        }
+    }
 }
 
 impl FloxerConfig {
@@ -170,10 +182,7 @@ impl FloxerConfig {
 
         if self.algorithm_config.index_strategy == IndexStrategy::ReadFromDiskIfStored {
             let mut index_path = suite_config.index_folder();
-            let index_file_name = format!(
-                "floxer-index-{}.flxi",
-                self.reference.name_for_output_files()
-            );
+            let index_file_name = format!("floxer-index-{}.flxi", self.reference);
             index_path.push(index_file_name);
 
             command.arg("--index");
@@ -350,7 +359,8 @@ pub struct FloxerStats {
     pub alignment_stats: AlignmentStats,
     pub alignments_per_query: HistogramData,
     pub alignments_edit_distance: HistogramData,
-    pub milliseconds_spent_per_query: HistogramData,
+    pub milliseconds_spent_in_search_per_query: HistogramData,
+    pub milliseconds_spent_in_verification_per_query: HistogramData,
 }
 
 impl FloxerStats {
@@ -359,7 +369,8 @@ impl FloxerStats {
             &self.query_lengths,
             &self.alignments_per_query,
             &self.alignments_edit_distance,
-            &self.milliseconds_spent_per_query,
+            &self.milliseconds_spent_in_search_per_query,
+            &self.milliseconds_spent_in_verification_per_query,
         ]
         .into_iter()
     }
@@ -369,7 +380,8 @@ impl FloxerStats {
             "Query lenghts",
             "Alignments per query",
             "Edit distances of alignments",
-            "Milliseconds spent per query",
+            "Milliseconds spent in search per query",
+            "Milliseconds spent in verification per query",
         ]
         .into_iter()
     }
@@ -393,7 +405,7 @@ impl SeedStats {
     }
 
     pub fn iter_metric_names(&self) -> impl Iterator<Item = &'static str> {
-        ["Seed lengts", "Errors per seed", "Seeds per query"].into_iter()
+        ["Seed lengths", "Errors per seed", "Seeds per query"].into_iter()
     }
 }
 

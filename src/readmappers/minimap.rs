@@ -1,9 +1,7 @@
 use std::{fs, process::Command};
 
 use crate::{
-    analyze_mapped_reads::{analyze_alignments_simple, SimpleMappedReadsStats},
-    config::BenchmarkSuiteConfig,
-    folder_structure::BenchmarkFolder,
+    cli::BenchmarkConfig, config::BenchmarkSuiteConfig, folder_structure::BenchmarkFolder,
 };
 
 use super::{IndexStrategy, Queries, Reference, ResourceMetrics};
@@ -17,11 +15,11 @@ pub struct MinimapConfig {
     pub num_threads: u16,
 }
 
-impl Default for MinimapConfig {
-    fn default() -> Self {
+impl From<&BenchmarkConfig> for MinimapConfig {
+    fn from(value: &BenchmarkConfig) -> Self {
         Self {
-            reference: Reference::HumanGenomeHg38,
-            queries: Queries::HumanWgsNanopore,
+            reference: value.reference,
+            queries: value.queries,
             index_strategy: IndexStrategy::ReadFromDiskIfStored,
             num_threads: super::NUM_THREADS_FOR_READMAPPERS,
         }
@@ -42,17 +40,12 @@ impl MinimapConfig {
         }
 
         let mut index_path = suite_config.index_folder();
-        let index_file_name = format!(
-            "minimap-index-{}-{}.mmi",
-            self.reference.name_for_output_files(),
-            self.queries.name_for_output_files()
-        );
+        let index_file_name = format!("minimap-index-{}-{}.mmi", self.reference, self.queries);
         index_path.push(index_file_name);
 
         println!(
             "- Running minimap for reference {} and queries {}",
-            self.reference.name_for_output_files(),
-            self.queries.name_for_output_files()
+            self.reference, self.queries
         );
 
         let index_resource_metrics = if self.index_strategy == IndexStrategy::ReadFromDiskIfStored
@@ -119,10 +112,7 @@ impl MinimapConfig {
         let map_timings_file_str = fs::read_to_string(map_timing_path)?;
         let map_resource_metrics: ResourceMetrics = toml::from_str(&map_timings_file_str)?;
 
-        let mapped_read_stats = analyze_alignments_simple(output_path)?;
-
         Ok(MinimapRunResult {
-            mapped_read_stats,
             map_resource_metrics,
             index_resource_metrics,
         })
@@ -130,7 +120,6 @@ impl MinimapConfig {
 }
 
 pub struct MinimapRunResult {
-    pub mapped_read_stats: SimpleMappedReadsStats,
     pub map_resource_metrics: ResourceMetrics,
     pub index_resource_metrics: Option<ResourceMetrics>,
 }

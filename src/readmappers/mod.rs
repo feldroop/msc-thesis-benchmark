@@ -1,6 +1,8 @@
 use std::{path::Path, process::Command};
 
+use clap::ValueEnum;
 use serde::Deserialize;
+use strum::Display;
 
 use crate::config::BenchmarkSuiteConfig;
 
@@ -22,11 +24,13 @@ fn add_time_args(command: &mut Command, timing_path: &Path) {
         .arg(TIME_TOOL_FORMAT_STRING);
 }
 
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone, ValueEnum, Display)]
+#[strum(serialize_all = "snake_case")]
 pub enum Reference {
     #[default]
     HumanGenomeHg38,
     Debug,
+    Simulated,
 }
 
 impl Reference {
@@ -34,24 +38,21 @@ impl Reference {
         match self {
             Reference::HumanGenomeHg38 => &suite_config.reference_paths.human_genome_hg38,
             Reference::Debug => &suite_config.reference_paths.debug,
-        }
-    }
-
-    fn name_for_output_files(&self) -> &str {
-        match self {
-            Self::HumanGenomeHg38 => "human-genome-hg38",
-            Self::Debug => "debug",
+            Reference::Simulated => &suite_config.reference_paths.simulated,
         }
     }
 }
 
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone, ValueEnum, Display)]
+#[strum(serialize_all = "snake_case")]
 pub enum Queries {
     #[default]
     HumanWgsNanopore,
     HumanWgsNanoporeSmall,
     Debug,
     ProblemQuery,
+    SimulatedSimple,
+    SimulatedPbSim,
 }
 
 impl Queries {
@@ -61,15 +62,8 @@ impl Queries {
             Queries::HumanWgsNanoporeSmall => &suite_config.query_paths.human_wgs_nanopore_small,
             Queries::Debug => &suite_config.query_paths.debug,
             Queries::ProblemQuery => &suite_config.query_paths.problem_query,
-        }
-    }
-
-    fn name_for_output_files(&self) -> &str {
-        match self {
-            Queries::HumanWgsNanopore => "human-wgs-nanopore",
-            Queries::HumanWgsNanoporeSmall => "human-wgs-nanopore-small",
-            Queries::Debug => "debug",
-            Queries::ProblemQuery => "problem-query",
+            Queries::SimulatedSimple => &suite_config.query_paths.simulated_simple,
+            Queries::SimulatedPbSim => &suite_config.query_paths.simulated_pbsim,
         }
     }
 
@@ -79,6 +73,18 @@ impl Queries {
             Queries::HumanWgsNanoporeSmall => "map-ont",
             Queries::Debug => "map-ont",
             Queries::ProblemQuery => "map-ont",
+            Queries::SimulatedSimple => "map-ont",
+            Queries::SimulatedPbSim => "map-ont",
+        }
+    }
+
+    pub fn smaller_equivalent(&self) -> Self {
+        match self {
+            Queries::HumanWgsNanopore | Queries::HumanWgsNanoporeSmall => {
+                Queries::HumanWgsNanoporeSmall
+            }
+            Queries::Debug | Queries::ProblemQuery => *self,
+            _ => panic!("No smaller equivalent for given query set: {}", self),
         }
     }
 }
