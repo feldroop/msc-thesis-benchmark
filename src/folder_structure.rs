@@ -1,6 +1,11 @@
+use anyhow::Result;
 use jiff::Zoned;
 
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    os::unix,
+    path::{Path, PathBuf},
+};
 
 use crate::cli::BenchmarkConfig;
 
@@ -41,5 +46,19 @@ impl BenchmarkFolder {
         let mut folder = self.folder.clone();
         folder.push("plots");
         folder
+    }
+
+    pub fn create_or_update_link_to_most_recent(&self) -> Result<()> {
+        let mut most_recent_link = self.folder.clone();
+        most_recent_link.pop();
+        most_recent_link.push("most_recent");
+
+        if most_recent_link.exists() {
+            fs::remove_file(&most_recent_link)?;
+        }
+
+        unix::fs::symlink(&self.folder, most_recent_link)?;
+
+        Ok(())
     }
 }

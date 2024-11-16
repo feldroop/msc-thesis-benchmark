@@ -287,7 +287,7 @@ fn debug_benchmark(
         .with_reference(Reference::Debug)
         .with_queries(Queries::Debug);
 
-    let _ = FloxerParameterBenchmark::from_iter(PexTreeConstruction::iter().map(
+    let res = FloxerParameterBenchmark::from_iter(PexTreeConstruction::iter().map(
         |pex_tree_construction| FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
                 pex_tree_construction,
@@ -303,6 +303,10 @@ fn debug_benchmark(
     ))
     .name("debug")
     .run(suite_config, &benchmark_config)?;
+
+    res.plot_seed_stats(suite_config);
+    res.plot_anchor_stats(suite_config);
+    res.plot_alignment_stats(suite_config);
 
     Ok(())
 }
@@ -370,10 +374,11 @@ fn index_build(
         suite_config,
     );
 
+    folder.create_or_update_link_to_most_recent()?;
+
     Ok(())
 }
 
-// Should usually only be run with small query sets
 fn interval_optimization(
     suite_config: &BenchmarkSuiteConfig,
     benchmark_config: &BenchmarkConfig,
@@ -441,6 +446,8 @@ fn minimap(suite_config: &BenchmarkSuiteConfig, benchmark_config: &BenchmarkConf
         &folder,
         suite_config,
     );
+
+    folder.create_or_update_link_to_most_recent()?;
 
     let mut floxer_mapped_reads_path = folder.get().to_owned();
     floxer_mapped_reads_path.push("floxer");
@@ -675,6 +682,8 @@ impl FloxerParameterBenchmark {
                     .unwrap_or_else(|| format!("benchmark_instance_{index}")),
             );
         }
+
+        benchmark_folder.create_or_update_link_to_most_recent()?;
 
         plots::plot_resource_metrics(
             &self.benchmark_name,
