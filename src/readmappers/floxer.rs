@@ -93,6 +93,7 @@ pub struct FloxerConfig {
     pub name: String,
     pub reference: Reference,
     pub queries: Queries,
+    pub only_analysis: bool,
     pub algorithm_config: FloxerAlgorithmConfig,
 }
 
@@ -102,6 +103,7 @@ impl From<&BenchmarkConfig> for FloxerConfig {
             name: "unnamed_instance".into(),
             reference: value.reference,
             queries: value.queries,
+            only_analysis: value.only_analysis,
             algorithm_config: Default::default(),
         }
     }
@@ -116,119 +118,23 @@ impl FloxerConfig {
         suite_config: &BenchmarkSuiteConfig,
         profile_config: ProfileConfig,
     ) -> Result<FloxerRunResult> {
-        let instance_folder = BenchmarkInstanceFolder::from_benchmark_folder_and_instance_name(
-            benchmark_folder,
-            &self.name,
-        )?;
+        let instance_folder =
+            if self.only_analysis && benchmark_folder.most_recect_previous_run_folder().exists() {
+                BenchmarkInstanceFolder::most_recent_previous_run(benchmark_folder, &self.name)?
+            } else {
+                let instance_folder = BenchmarkInstanceFolder::new(benchmark_folder, &self.name)?;
 
-        let mut command = match profile_config {
-            ProfileConfig::Off => Command::new("/usr/bin/time"),
-            ProfileConfig::On => {
-                let mut command = Command::new("perf");
-                command
-                    .arg("record")
-                    .arg("-o")
-                    .arg(&instance_folder.perf_data_path)
-                    .arg("-F")
-                    .arg("100")
-                    .arg("--call-graph")
-                    .arg("dwarf,16384")
-                    .arg("-g") // both user and kernel space
-                    .arg("--")
-                    .arg("/usr/bin/time");
-                command
-            }
-        };
+                self.actually_run(
+                    profile_config,
+                    &instance_folder,
+                    suite_config,
+                    benchmark_name,
+                )?;
 
-        super::add_time_args(&mut command, &instance_folder.timing_path);
+                benchmark_folder.create_or_update_link_to_most_recent()?;
 
-        let reference_path = self.reference.path(suite_config);
-
-        let queries_path = self.queries.path(suite_config);
-
-        // from here on the actual floxer command
-        command
-            .arg(&suite_config.readmapper_binaries.floxer)
-            .arg("--reference")
-            .arg(reference_path)
-            .arg("--queries")
-            .arg(queries_path)
-            .arg("--output")
-            .arg(&instance_folder.mapped_reads_bam_path)
-            .arg("--logfile")
-            .arg(&instance_folder.logfile_path)
-            .arg("--stats")
-            .arg(&instance_folder.stats_path);
-
-        if self.algorithm_config.index_strategy == IndexStrategy::ReadFromDiskIfStored {
-            let mut index_path = suite_config.index_folder();
-            let index_file_name = format!("floxer-index-{}.flxi", self.reference);
-            index_path.push(index_file_name);
-
-            command.arg("--index");
-            command.arg(index_path);
-        }
-
-        match self.algorithm_config.query_errors {
-            QueryErrors::Exact(num_errors) => {
-                command.args(["--query-errors", &num_errors.to_string()]);
-            }
-            QueryErrors::Rate(error_ratio) => {
-                command.args(["--error-probability", &error_ratio.to_string()]);
-            }
-        }
-
-        command.args([
-            "--seed-errors",
-            &self.algorithm_config.pex_seed_errors.to_string(),
-            "--max-anchors",
-            &self.algorithm_config.max_num_anchors.to_string(),
-            "--anchor-group-order",
-            &self.algorithm_config.anchor_group_order.to_string(),
-            "--extra-verification-ratio",
-            &self.algorithm_config.extra_verification_ratio.to_string(),
-            "--threads",
-            &self.algorithm_config.num_threads.to_string(),
-            "--num-anchors-per-task",
-            &self
-                .algorithm_config
-                .num_anchors_per_verification_task
-                .to_string(),
-        ]);
-
-        if let PexTreeConstruction::BottomUp = self.algorithm_config.pex_tree_construction {
-            command.arg("--bottom-up-pex-tree");
-        }
-
-        if let IntervalOptimization::On = self.algorithm_config.interval_optimization {
-            command.args([
-                "--interval-optimization",
-                "--allowed-interval-overlap-ratio",
-                &self
-                    .algorithm_config
-                    .allowed_interval_overlap_ratio
-                    .to_string(),
-            ]);
-        }
-
-        if let VerificationAlgorithm::DirectFull = self.algorithm_config.verification_algorithm {
-            command.arg("--direct-full-verification");
-        }
-
-        println!(
-            "- Running the benchmark: {}",
-            self.full_name(benchmark_name)
-        );
-        let floxer_proc_output = command.output()?;
-
-        if !floxer_proc_output.status.success()
-            || (!floxer_proc_output.stdout.is_empty() && profile_config == ProfileConfig::Off)
-        {
-            bail!(
-                "Something went wrong. Floxer process output: {:?}",
-                floxer_proc_output
-            );
-        }
+                instance_folder
+            };
 
         if let ProfileConfig::On = profile_config {
             create_profile(&instance_folder, &self.full_name(benchmark_name))?;
@@ -248,6 +154,113 @@ impl FloxerConfig {
             resource_metrics,
             mapped_read_stats,
         })
+    }
+
+    fn actually_run(
+        &self,
+        profile_config: ProfileConfig,
+        instance_folder: &BenchmarkInstanceFolder,
+        suite_config: &BenchmarkSuiteConfig,
+        benchmark_name: &str,
+    ) -> Result<()> {
+        let mut command = match profile_config {
+            ProfileConfig::Off => Command::new("/usr/bin/time"),
+            ProfileConfig::On => {
+                let mut command = Command::new("perf");
+                command
+                    .arg("record")
+                    .arg("-o")
+                    .arg(&instance_folder.perf_data_path)
+                    .arg("-F")
+                    .arg("100")
+                    .arg("--call-graph")
+                    .arg("dwarf,16384")
+                    .arg("-g") // both user and kernel space
+                    .arg("--")
+                    .arg("/usr/bin/time");
+                command
+            }
+        };
+        super::add_time_args(&mut command, &instance_folder.timing_path);
+        let reference_path = self.reference.path(suite_config);
+        let queries_path = self.queries.path(suite_config);
+        command
+            .arg(&suite_config.readmapper_binaries.floxer)
+            .arg("--reference")
+            .arg(reference_path)
+            .arg("--queries")
+            .arg(queries_path)
+            .arg("--output")
+            .arg(&instance_folder.mapped_reads_bam_path)
+            .arg("--logfile")
+            .arg(&instance_folder.logfile_path)
+            .arg("--stats")
+            .arg(&instance_folder.stats_path);
+        if self.algorithm_config.index_strategy == IndexStrategy::ReadFromDiskIfStored {
+            let mut index_path = suite_config.index_folder();
+            let index_file_name = format!("floxer-index-{}.flxi", self.reference);
+            index_path.push(index_file_name);
+
+            command.arg("--index");
+            command.arg(index_path);
+        }
+        match self.algorithm_config.query_errors {
+            QueryErrors::Exact(num_errors) => {
+                command.args(["--query-errors", &num_errors.to_string()]);
+            }
+            QueryErrors::Rate(error_ratio) => {
+                command.args(["--error-probability", &error_ratio.to_string()]);
+            }
+        }
+        command.args([
+            "--seed-errors",
+            &self.algorithm_config.pex_seed_errors.to_string(),
+            "--max-anchors",
+            &self.algorithm_config.max_num_anchors.to_string(),
+            "--anchor-group-order",
+            &self.algorithm_config.anchor_group_order.to_string(),
+            "--extra-verification-ratio",
+            &self.algorithm_config.extra_verification_ratio.to_string(),
+            "--threads",
+            &self.algorithm_config.num_threads.to_string(),
+            "--num-anchors-per-task",
+            &self
+                .algorithm_config
+                .num_anchors_per_verification_task
+                .to_string(),
+        ]);
+        if let PexTreeConstruction::BottomUp = self.algorithm_config.pex_tree_construction {
+            command.arg("--bottom-up-pex-tree");
+        }
+        if let IntervalOptimization::On = self.algorithm_config.interval_optimization {
+            command.args([
+                "--interval-optimization",
+                "--allowed-interval-overlap-ratio",
+                &self
+                    .algorithm_config
+                    .allowed_interval_overlap_ratio
+                    .to_string(),
+            ]);
+        }
+        if let VerificationAlgorithm::DirectFull = self.algorithm_config.verification_algorithm {
+            command.arg("--direct-full-verification");
+        }
+        println!(
+            "- Running the benchmark: {}",
+            self.full_name(benchmark_name)
+        );
+        let floxer_proc_output = command.output()?;
+
+        if !floxer_proc_output.status.success()
+            || (!floxer_proc_output.stdout.is_empty() && profile_config == ProfileConfig::Off)
+        {
+            bail!(
+                "Something went wrong. Floxer process output: {:?}",
+                floxer_proc_output
+            );
+        }
+
+        Ok(())
     }
 
     fn full_name(&self, benchmark_name: &str) -> String {

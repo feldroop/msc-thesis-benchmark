@@ -370,8 +370,6 @@ fn index_build(
         suite_config,
     );
 
-    folder.create_or_update_link_to_most_recent()?;
-
     Ok(())
 }
 
@@ -442,8 +440,6 @@ fn minimap(suite_config: &BenchmarkSuiteConfig, benchmark_config: &BenchmarkConf
         &folder,
         suite_config,
     );
-
-    folder.create_or_update_link_to_most_recent()?;
 
     let mut floxer_mapped_reads_path = folder.get().to_owned();
     floxer_mapped_reads_path.push("floxer");
@@ -671,8 +667,6 @@ impl FloxerParameterBenchmark {
             floxer_results.push(res);
             instance_names.push(floxer_config.name.clone());
         }
-
-        benchmark_folder.create_or_update_link_to_most_recent()?;
 
         plots::plot_resource_metrics(
             &self.benchmark_name,

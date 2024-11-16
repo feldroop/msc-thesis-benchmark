@@ -48,10 +48,16 @@ impl BenchmarkFolder {
         folder
     }
 
-    pub fn create_or_update_link_to_most_recent(&self) -> Result<()> {
+    pub fn most_recect_previous_run_folder(&self) -> PathBuf {
         let mut most_recent_link = self.folder.clone();
         most_recent_link.pop();
         most_recent_link.push("most_recent");
+
+        most_recent_link
+    }
+
+    pub fn create_or_update_link_to_most_recent(&self) -> Result<()> {
+        let most_recent_link = self.most_recect_previous_run_folder();
 
         if most_recent_link.exists() {
             fs::remove_file(&most_recent_link)?;
@@ -76,13 +82,24 @@ pub struct BenchmarkInstanceFolder {
 }
 
 impl BenchmarkInstanceFolder {
-    pub fn from_benchmark_folder_and_instance_name(
-        benchmark_folder: &BenchmarkFolder,
-        instance_name: &str,
-    ) -> Result<Self> {
+    pub fn new(benchmark_folder: &BenchmarkFolder, instance_name: &str) -> Result<Self> {
         let mut base_folder = benchmark_folder.get().to_path_buf();
         base_folder.push(instance_name);
 
+        Self::from_parts(base_folder, instance_name)
+    }
+
+    pub fn most_recent_previous_run(
+        benchmark_folder: &BenchmarkFolder,
+        instance_name: &str,
+    ) -> Result<Self> {
+        let mut base_folder = benchmark_folder.most_recect_previous_run_folder();
+        base_folder.push(instance_name);
+
+        Self::from_parts(base_folder, instance_name)
+    }
+
+    fn from_parts(base_folder: PathBuf, instance_name: &str) -> Result<Self> {
         if !base_folder.exists() {
             fs::create_dir_all(&base_folder)?;
         }
