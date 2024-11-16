@@ -3,10 +3,10 @@ use crate::{
     benchmarks::ProfileConfig,
     cli::BenchmarkConfig,
     config::BenchmarkSuiteConfig,
-    folder_structure::BenchmarkFolder,
+    folder_structure::{BenchmarkFolder, BenchmarkInstanceFolder},
 };
 
-use std::{fs, path::Path, process::Command};
+use std::{fs, process::Command};
 
 use super::{IndexStrategy, Queries, Reference, ResourceMetrics};
 use anyhow::{bail, Result};
@@ -90,7 +90,7 @@ impl Default for FloxerAlgorithmConfig {
 // the output path will be determined from the other parameters
 #[derive(Debug)]
 pub struct FloxerConfig {
-    pub name: Option<String>,
+    pub name: String,
     pub reference: Reference,
     pub queries: Queries,
     pub algorithm_config: FloxerAlgorithmConfig,
@@ -99,7 +99,7 @@ pub struct FloxerConfig {
 impl From<&BenchmarkConfig> for FloxerConfig {
     fn from(value: &BenchmarkConfig) -> Self {
         FloxerConfig {
-            name: None,
+            name: "unnamed_instance".into(),
             reference: value.reference,
             queries: value.queries,
             algorithm_config: Default::default(),
@@ -116,30 +116,10 @@ impl FloxerConfig {
         suite_config: &BenchmarkSuiteConfig,
         profile_config: ProfileConfig,
     ) -> Result<FloxerRunResult> {
-        let mut output_folder = benchmark_folder.get().to_path_buf();
-
-        if let Some(instance_name) = &self.name {
-            output_folder.push(instance_name);
-        }
-
-        if !output_folder.exists() {
-            fs::create_dir_all(&output_folder)?;
-        }
-
-        let mut output_path = output_folder.clone();
-        output_path.push("mapped_reads.bam");
-
-        let mut logfile_path = output_folder.clone();
-        logfile_path.push("log.txt");
-
-        let mut timing_path = output_folder.clone();
-        timing_path.push("timing.toml");
-
-        let mut stats_path = output_folder.clone();
-        stats_path.push("stats.toml");
-
-        let mut perf_data_path = output_folder.clone();
-        perf_data_path.push("perf.data");
+        let instance_folder = BenchmarkInstanceFolder::from_benchmark_folder_and_instance_name(
+            benchmark_folder,
+            &self.name,
+        )?;
 
         let mut command = match profile_config {
             ProfileConfig::Off => Command::new("/usr/bin/time"),
@@ -148,7 +128,7 @@ impl FloxerConfig {
                 command
                     .arg("record")
                     .arg("-o")
-                    .arg(&perf_data_path)
+                    .arg(&instance_folder.perf_data_path)
                     .arg("-F")
                     .arg("100")
                     .arg("--call-graph")
@@ -160,7 +140,7 @@ impl FloxerConfig {
             }
         };
 
-        super::add_time_args(&mut command, &timing_path);
+        super::add_time_args(&mut command, &instance_folder.timing_path);
 
         let reference_path = self.reference.path(suite_config);
 
@@ -174,11 +154,11 @@ impl FloxerConfig {
             .arg("--queries")
             .arg(queries_path)
             .arg("--output")
-            .arg(&output_path)
+            .arg(&instance_folder.mapped_reads_bam_path)
             .arg("--logfile")
-            .arg(logfile_path)
+            .arg(&instance_folder.logfile_path)
             .arg("--stats")
-            .arg(&stats_path);
+            .arg(&instance_folder.stats_path);
 
         if self.algorithm_config.index_strategy == IndexStrategy::ReadFromDiskIfStored {
             let mut index_path = suite_config.index_folder();
@@ -249,28 +229,21 @@ impl FloxerConfig {
                 floxer_proc_output
             );
         }
-        let mut profile_path = output_folder.clone();
-        profile_path.push("samply_profile.json");
 
         if let ProfileConfig::On = profile_config {
-            create_profile(
-                &perf_data_path,
-                &profile_path,
-                &self.full_name(benchmark_name),
-                suite_config,
-            )?;
+            create_profile(&instance_folder, &self.full_name(benchmark_name))?;
         }
 
-        let stats_file_str = fs::read_to_string(stats_path)?;
+        let stats_file_str = fs::read_to_string(instance_folder.stats_path)?;
         let stats: FloxerStats = toml::from_str(&stats_file_str)?;
 
-        let timings_file_str = fs::read_to_string(timing_path)?;
+        let timings_file_str = fs::read_to_string(instance_folder.timing_path)?;
         let resource_metrics: ResourceMetrics = toml::from_str(&timings_file_str)?;
 
-        let mapped_read_stats = analyze_alignments_simple(output_path)?;
+        let mapped_read_stats = analyze_alignments_simple(instance_folder.mapped_reads_bam_path)?;
 
         Ok(FloxerRunResult {
-            benchmark_instance_name: self.name.clone().unwrap_or_else(|| String::from("floxer")),
+            benchmark_instance_name: self.name.clone(),
             stats,
             resource_metrics,
             mapped_read_stats,
@@ -278,29 +251,20 @@ impl FloxerConfig {
     }
 
     fn full_name(&self, benchmark_name: &str) -> String {
-        if let Some(instance_name) = &self.name {
-            format!("{}__{}", benchmark_name, instance_name)
-        } else {
-            benchmark_name.to_owned()
-        }
+        format!("{}__{}", benchmark_name, self.name)
     }
 }
 
-fn create_profile(
-    perf_data_path: &Path,
-    profile_path: &Path,
-    profile_name: &str,
-    suite_config: &BenchmarkSuiteConfig,
-) -> Result<()> {
+fn create_profile(instance_folder: &BenchmarkInstanceFolder, profile_name: &str) -> Result<()> {
     let samply_output = Command::new("samply")
         .arg("import")
         .arg("--profile-name")
         .arg(profile_name)
         .arg("--save-only")
         .arg("--output")
-        .arg(profile_path)
+        .arg(&instance_folder.samply_profile_path)
         .arg("--no-open")
-        .arg(perf_data_path)
+        .arg(&instance_folder.perf_data_path)
         .output()?;
 
     if !samply_output.status.success() {
@@ -310,20 +274,12 @@ fn create_profile(
         )
     }
 
-    let mut all_plots_profile_path = suite_config.all_plots_folder();
-    all_plots_profile_path.push(profile_path.file_name().unwrap());
-    std::fs::copy(profile_path, all_plots_profile_path)?;
-
-    let mut flamegraph_path = profile_path.to_owned();
-    flamegraph_path.set_file_name(format!("flamegraph_{}", profile_name));
-    flamegraph_path.set_extension("svg");
-
     let flamegraph_output = Command::new("flamegraph")
         .arg("--deterministic")
         .arg("--perfdata")
-        .arg(perf_data_path)
+        .arg(&instance_folder.perf_data_path)
         .arg("--output")
-        .arg(&flamegraph_path)
+        .arg(&instance_folder.flamegraph_path)
         .output()?;
 
     if !flamegraph_output.status.success() {
@@ -332,10 +288,6 @@ fn create_profile(
             flamegraph_output
         )
     }
-
-    let mut all_plots_flamegraph_path = suite_config.all_plots_folder();
-    all_plots_flamegraph_path.push(flamegraph_path.file_name().unwrap());
-    std::fs::copy(profile_path, all_plots_flamegraph_path)?;
 
     Ok(())
 }

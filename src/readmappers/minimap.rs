@@ -1,7 +1,9 @@
 use std::{fs, process::Command};
 
 use crate::{
-    cli::BenchmarkConfig, config::BenchmarkSuiteConfig, folder_structure::BenchmarkFolder,
+    cli::BenchmarkConfig,
+    config::BenchmarkSuiteConfig,
+    folder_structure::{BenchmarkFolder, BenchmarkInstanceFolder},
 };
 
 use super::{IndexStrategy, Queries, Reference, ResourceMetrics};
@@ -32,12 +34,10 @@ impl MinimapConfig {
         benchmark_folder: &BenchmarkFolder,
         suite_config: &BenchmarkSuiteConfig,
     ) -> Result<MinimapRunResult> {
-        let mut output_folder = benchmark_folder.get().to_path_buf();
-        output_folder.push("minimap");
-
-        if !output_folder.exists() {
-            fs::create_dir_all(&output_folder)?;
-        }
+        let instance_folder = BenchmarkInstanceFolder::from_benchmark_folder_and_instance_name(
+            benchmark_folder,
+            "minimap",
+        )?;
 
         let mut index_path = suite_config.index_folder();
         let index_file_name = format!("minimap-index-{}-{}.mmi", self.reference, self.queries);
@@ -51,12 +51,9 @@ impl MinimapConfig {
         let index_resource_metrics = if self.index_strategy == IndexStrategy::ReadFromDiskIfStored
             || !index_path.exists()
         {
-            let mut index_timing_path = output_folder.clone();
-            index_timing_path.push("timing.toml");
-
             let mut index_command = Command::new("/usr/bin/time");
 
-            super::add_time_args(&mut index_command, &index_timing_path);
+            super::add_time_args(&mut index_command, &instance_folder.index_timing_path);
 
             index_command.arg(&suite_config.readmapper_binaries.minimap);
             index_command.arg("-x");
@@ -75,21 +72,15 @@ impl MinimapConfig {
                 );
             }
 
-            let index_timings_file_str = fs::read_to_string(index_timing_path)?;
+            let index_timings_file_str = fs::read_to_string(instance_folder.index_timing_path)?;
             let index_resource_metrics: ResourceMetrics = toml::from_str(&index_timings_file_str)?;
             Some(index_resource_metrics)
         } else {
             None
         };
 
-        let mut output_path = output_folder.clone();
-        output_path.push("mapped_reads.sam");
-
-        let mut map_timing_path = output_folder.clone();
-        map_timing_path.push("timing.toml");
-
         let mut map_command = Command::new("/usr/bin/time");
-        super::add_time_args(&mut map_command, &map_timing_path);
+        super::add_time_args(&mut map_command, &instance_folder.timing_path);
 
         map_command
             .arg(&suite_config.readmapper_binaries.minimap)
@@ -99,7 +90,7 @@ impl MinimapConfig {
             .arg("-t")
             .arg(self.num_threads.to_string())
             .arg("-o")
-            .arg(&output_path);
+            .arg(&instance_folder.mapped_reads_sam_path);
 
         let minimap_map_proc_output = map_command.output()?;
         if !minimap_map_proc_output.status.success() {
@@ -109,7 +100,7 @@ impl MinimapConfig {
             );
         }
 
-        let map_timings_file_str = fs::read_to_string(map_timing_path)?;
+        let map_timings_file_str = fs::read_to_string(&instance_folder.timing_path)?;
         let map_resource_metrics: ResourceMetrics = toml::from_str(&map_timings_file_str)?;
 
         Ok(MinimapRunResult {

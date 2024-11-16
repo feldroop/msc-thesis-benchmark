@@ -62,3 +62,68 @@ impl BenchmarkFolder {
         Ok(())
     }
 }
+
+pub struct BenchmarkInstanceFolder {
+    pub mapped_reads_sam_path: PathBuf,
+    pub mapped_reads_bam_path: PathBuf,
+    pub logfile_path: PathBuf,
+    pub timing_path: PathBuf,
+    pub index_timing_path: PathBuf,
+    pub stats_path: PathBuf,
+    pub perf_data_path: PathBuf,
+    pub samply_profile_path: PathBuf,
+    pub flamegraph_path: PathBuf,
+}
+
+impl BenchmarkInstanceFolder {
+    pub fn from_benchmark_folder_and_instance_name(
+        benchmark_folder: &BenchmarkFolder,
+        instance_name: &str,
+    ) -> Result<Self> {
+        let mut base_folder = benchmark_folder.get().to_path_buf();
+        base_folder.push(instance_name);
+
+        if !base_folder.exists() {
+            fs::create_dir_all(&base_folder)?;
+        }
+
+        let mut mapped_reads_sam_path = base_folder.clone();
+        mapped_reads_sam_path.push("mapped_reads.sam");
+
+        let mut mapped_reads_bam_path = base_folder.clone();
+        mapped_reads_bam_path.push("mapped_reads.bam");
+
+        let mut logfile_path = base_folder.clone();
+        logfile_path.push("log.txt");
+
+        let mut timing_path = base_folder.clone();
+        timing_path.push("timing.toml");
+
+        let mut index_timing_path = base_folder.clone();
+        index_timing_path.push("index_timing.toml");
+
+        let mut stats_path = base_folder.clone();
+        stats_path.push("stats.toml");
+
+        let mut perf_data_path = base_folder.clone();
+        perf_data_path.push("perf.data");
+
+        let mut samply_profile_path = base_folder.clone();
+        samply_profile_path.push("samply_profile.json");
+
+        let mut flamegraph_path = base_folder.clone();
+        flamegraph_path.push(format!("flamegraph_{}.svg", instance_name));
+
+        Ok(Self {
+            mapped_reads_sam_path,
+            mapped_reads_bam_path,
+            logfile_path,
+            timing_path,
+            index_timing_path,
+            stats_path,
+            perf_data_path,
+            samply_profile_path,
+            flamegraph_path,
+        })
+    }
+}

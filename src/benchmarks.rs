@@ -88,7 +88,9 @@ pub fn run_benchmarks<I: IntoIterator<Item = Benchmark>>(
     suite_config: &BenchmarkSuiteConfig,
     benchmark_config: &BenchmarkConfig,
 ) -> Result<()> {
-    let skip_for_now: HashSet<_> = [Benchmark::VerificationAlgorithm].into_iter().collect();
+    let skip_for_now: HashSet<_> = [Benchmark::VerificationAlgorithm, Benchmark::ProblemQuery]
+        .into_iter()
+        .collect();
 
     let mut num_error_runs = 0;
     for benchmark in benchmarks.into_iter() {
@@ -218,10 +220,8 @@ fn allowed_interval_overlap_ratio(
                     allowed_interval_overlap_ratio,
                     ..Default::default()
                 },
-                name: Some(
-                    format!("allowed_interval_overlap_ratio_{allowed_interval_overlap_ratio}")
-                        .replace('.', "_"),
-                ),
+                name: format!("allowed_interval_overlap_ratio_{allowed_interval_overlap_ratio}")
+                    .replace('.', "_"),
                 ..From::from(benchmark_config)
             }
         },
@@ -245,7 +245,7 @@ fn anchor_group_order(
                     anchor_group_order,
                     ..Default::default()
                 },
-                name: Some(anchor_group_order.to_string()),
+                name: anchor_group_order.to_string(),
                 ..From::from(benchmark_config)
             }
         }))
@@ -267,9 +267,7 @@ fn anchors_per_verification_task(
                 num_anchors_per_verification_task,
                 ..Default::default()
             },
-            name: Some(format!(
-                "anchors_per_task_{num_anchors_per_verification_task}"
-            )),
+            name: format!("anchors_per_task_{num_anchors_per_verification_task}"),
             ..From::from(benchmark_config)
         },
     ))
@@ -297,7 +295,7 @@ fn debug_benchmark(
                 query_errors: QueryErrors::Exact(2),
                 ..Default::default()
             },
-            name: Some(pex_tree_construction.to_string()),
+            name: pex_tree_construction.to_string(),
             ..From::from(&benchmark_config)
         },
     ))
@@ -321,9 +319,7 @@ fn extra_verification_ratio(
                 extra_verification_ratio,
                 ..Default::default()
             },
-            name: Some(
-                format!("extra_verification_ratio_{extra_verification_ratio}").replace('.', "_"),
-            ),
+            name: format!("extra_verification_ratio_{extra_verification_ratio}").replace('.', "_"),
             ..From::from(benchmark_config)
         },
     ))
@@ -348,7 +344,7 @@ fn index_build(
             index_strategy: IndexStrategy::AlwaysRebuild,
             ..Default::default()
         },
-        name: Some(String::from("floxer")),
+        name: String::from("floxer"),
         ..From::from(&benchmark_config)
     }
     .run(&folder, name, suite_config, ProfileConfig::Off)?;
@@ -391,7 +387,7 @@ fn interval_optimization(
                 interval_optimization,
                 ..Default::default()
             },
-            name: Some(interval_optimization.to_string()),
+            name: interval_optimization.to_string(),
             ..From::from(&benchmark_config)
         },
     ))
@@ -413,7 +409,7 @@ fn max_anchors(
                 max_num_anchors,
                 ..Default::default()
             },
-            name: Some(format!("max_anchors_{max_num_anchors}")),
+            name: format!("max_anchors_{max_num_anchors}"),
             ..From::from(benchmark_config)
         },
     ))
@@ -430,7 +426,7 @@ fn minimap(suite_config: &BenchmarkSuiteConfig, benchmark_config: &BenchmarkConf
     let name = "minimap";
     let folder = BenchmarkFolder::new(&suite_config.output_folder, name, benchmark_config);
     let floxer_res = FloxerConfig {
-        name: Some(String::from("floxer")),
+        name: String::from("floxer"),
         ..From::from(benchmark_config)
     }
     .run(&folder, name, suite_config, ProfileConfig::Off)?;
@@ -479,7 +475,7 @@ fn pex_seed_errors(
             pex_seed_errors,
             ..Default::default()
         },
-        name: Some(format!("pex_seed_errors_{pex_seed_errors}")),
+        name: format!("pex_seed_errors_{pex_seed_errors}"),
         ..From::from(benchmark_config)
     }))
     .name("pex_seed_errors")
@@ -510,10 +506,7 @@ fn pex_tree_building(
                 pex_seed_errors,
                 ..Default::default()
             },
-            name: Some(format!(
-                "{}_{}_seed_errors",
-                pex_tree_construction, pex_seed_errors
-            )),
+            name: format!("{}_{}_seed_errors", pex_tree_construction, pex_seed_errors),
             ..From::from(benchmark_config)
         }),
     )
@@ -547,6 +540,7 @@ fn problem_query(
             allowed_interval_overlap_ratio: 0.8,
             ..Default::default()
         },
+        name: "problem_query_instance".into(),
         ..From::from(&benchmark_config)
     }])
     .name("problem_query")
@@ -567,7 +561,7 @@ fn query_error_rate(
                     query_errors: QueryErrors::Rate(query_error_ratio),
                     ..Default::default()
                 },
-                name: Some(format!("query_error_rate_{query_error_ratio}").replace('.', "_")),
+                name: format!("query_error_rate_{query_error_ratio}").replace('.', "_"),
                 ..From::from(benchmark_config)
             },
         ))
@@ -587,7 +581,7 @@ fn threads(suite_config: &BenchmarkSuiteConfig, benchmark_config: &BenchmarkConf
                 num_threads,
                 ..Default::default()
             },
-            name: Some(format!("num_threads_{num_threads}")),
+            name: format!("num_threads_{num_threads}"),
             ..From::from(benchmark_config)
         }
     }))
@@ -609,7 +603,7 @@ fn verification_algorithm(
                 verification_algorithm,
                 ..Default::default()
             },
-            name: Some(verification_algorithm.to_string()),
+            name: verification_algorithm.to_string(),
             ..From::from(&benchmark_config)
         },
     ))
@@ -666,7 +660,7 @@ impl FloxerParameterBenchmark {
         let mut floxer_results = Vec::new();
         let mut instance_names = Vec::new();
 
-        for (index, floxer_config) in self.floxer_configs.iter().enumerate() {
+        for floxer_config in self.floxer_configs.iter() {
             let res = floxer_config.run(
                 &benchmark_folder,
                 &self.benchmark_name,
@@ -675,12 +669,7 @@ impl FloxerParameterBenchmark {
             )?;
 
             floxer_results.push(res);
-            instance_names.push(
-                floxer_config
-                    .name
-                    .clone()
-                    .unwrap_or_else(|| format!("benchmark_instance_{index}")),
-            );
+            instance_names.push(floxer_config.name.clone());
         }
 
         benchmark_folder.create_or_update_link_to_most_recent()?;
