@@ -21,7 +21,6 @@ static UNNAMED_BENCHMARK_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug, Clone, Copy, EnumIter, ValueEnum, PartialEq, Eq, Hash)]
 pub enum Benchmark {
-    AllowedIntervalOverlapRatio,
     AnchorGroupOrder,
     AnchorsPerVerificationTask,
     Debug,
@@ -53,9 +52,6 @@ impl Benchmark {
         benchmark_config: &BenchmarkConfig,
     ) -> Result<()> {
         match *self {
-            Benchmark::AllowedIntervalOverlapRatio => {
-                allowed_interval_overlap_ratio(suite_config, benchmark_config)
-            }
             Benchmark::AnchorGroupOrder => anchor_group_order(suite_config, benchmark_config),
             Benchmark::AnchorsPerVerificationTask => {
                 anchors_per_verification_task(suite_config, benchmark_config)
@@ -88,16 +84,8 @@ pub fn run_benchmarks<I: IntoIterator<Item = Benchmark>>(
     suite_config: &BenchmarkSuiteConfig,
     benchmark_config: &BenchmarkConfig,
 ) -> Result<()> {
-    let skip_for_now: HashSet<_> = [Benchmark::VerificationAlgorithm, Benchmark::ProblemQuery]
-        .into_iter()
-        .collect();
-
     let mut num_error_runs = 0;
     for benchmark in benchmarks.into_iter() {
-        if skip_for_now.contains(&benchmark) {
-            continue;
-        }
-
         if let Err(err) = benchmark.run(suite_config, benchmark_config) {
             println!("{}", err);
             num_error_runs += 1;
@@ -117,7 +105,15 @@ pub fn run_all(
     suite_config: &BenchmarkSuiteConfig,
     benchmark_config: &BenchmarkConfig,
 ) -> Result<()> {
-    run_benchmarks(Benchmark::iter(), suite_config, benchmark_config)
+    let skip_for_now: HashSet<_> = [Benchmark::VerificationAlgorithm, Benchmark::ProblemQuery]
+        .into_iter()
+        .collect();
+
+    run_benchmarks(
+        Benchmark::iter().filter(|benchmark| !skip_for_now.contains(benchmark)),
+        suite_config,
+        benchmark_config,
+    )
 }
 
 struct BenchmarkResult {
@@ -207,31 +203,6 @@ impl BenchmarkResult {
             suite_config,
         );
     }
-}
-
-fn allowed_interval_overlap_ratio(
-    suite_config: &BenchmarkSuiteConfig,
-    benchmark_config: &BenchmarkConfig,
-) -> Result<()> {
-    let res = FloxerParameterBenchmark::from_iter([1.0, 0.95, 0.9, 0.5, 0.01].into_iter().map(
-        |allowed_interval_overlap_ratio| {
-            FloxerConfig {
-                algorithm_config: FloxerAlgorithmConfig {
-                    allowed_interval_overlap_ratio,
-                    ..Default::default()
-                },
-                name: format!("allowed_interval_overlap_ratio_{allowed_interval_overlap_ratio}")
-                    .replace('.', "_"),
-                ..From::from(benchmark_config)
-            }
-        },
-    ))
-    .name("allowed_interval_overlap_ratio")
-    .run(suite_config, benchmark_config)?;
-
-    res.plot_alignment_stats(suite_config);
-
-    Ok(())
 }
 
 fn anchor_group_order(
@@ -530,18 +501,21 @@ fn problem_query(
 ) -> Result<()> {
     let benchmark_config = benchmark_config.with_queries(Queries::ProblemQuery);
 
-    let _ = FloxerParameterBenchmark::from_iter([FloxerConfig {
+    let res = FloxerParameterBenchmark::from_iter((0..10).map(|i| FloxerConfig {
         algorithm_config: FloxerAlgorithmConfig {
-            pex_seed_errors: 1,
-            allowed_interval_overlap_ratio: 0.8,
+            num_anchors_per_verification_task: 3_000,
             ..Default::default()
         },
-        name: "problem_query_instance".into(),
+        name: format!("problem_{i}"),
         ..From::from(&benchmark_config)
-    }])
+    }))
     .name("problem_query")
     .with_profile()
-    .run(suite_config, &benchmark_config);
+    .run(suite_config, &benchmark_config)?;
+
+    res.plot_seed_stats(suite_config);
+    res.plot_anchor_stats(suite_config);
+    res.plot_alignment_stats(suite_config);
 
     Ok(())
 }
@@ -571,7 +545,7 @@ fn query_error_rate(
 }
 
 fn threads(suite_config: &BenchmarkSuiteConfig, benchmark_config: &BenchmarkConfig) -> Result<()> {
-    FloxerParameterBenchmark::from_iter([8, 16, 20, 24, 32].into_iter().map(|num_threads| {
+    FloxerParameterBenchmark::from_iter([4, 8, 16, 20, 24].into_iter().map(|num_threads| {
         FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
                 num_threads,

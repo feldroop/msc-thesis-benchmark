@@ -59,7 +59,6 @@ pub struct FloxerAlgorithmConfig {
     pub pex_tree_construction: PexTreeConstruction,
     pub interval_optimization: IntervalOptimization,
     pub extra_verification_ratio: f64,
-    pub allowed_interval_overlap_ratio: f64,
     pub verification_algorithm: VerificationAlgorithm,
     pub num_anchors_per_verification_task: usize,
     pub num_threads: u16,
@@ -78,7 +77,6 @@ impl Default for FloxerAlgorithmConfig {
             pex_tree_construction: PexTreeConstruction::BottomUp,
             interval_optimization: IntervalOptimization::On,
             extra_verification_ratio: 0.05,
-            allowed_interval_overlap_ratio: 1.0,
             verification_algorithm: VerificationAlgorithm::Hierarchical,
             num_anchors_per_verification_task: 10_000,
             num_threads: super::NUM_THREADS_FOR_READMAPPERS,
@@ -233,14 +231,7 @@ impl FloxerConfig {
             command.arg("--bottom-up-pex-tree");
         }
         if let IntervalOptimization::On = self.algorithm_config.interval_optimization {
-            command.args([
-                "--interval-optimization",
-                "--allowed-interval-overlap-ratio",
-                &self
-                    .algorithm_config
-                    .allowed_interval_overlap_ratio
-                    .to_string(),
-            ]);
+            command.args(["--interval-optimization"]);
         }
         if let VerificationAlgorithm::DirectFull = self.algorithm_config.verification_algorithm {
             command.arg("--direct-full-verification");
