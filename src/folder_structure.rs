@@ -77,7 +77,6 @@ pub struct BenchmarkInstanceFolder {
     pub index_timing_path: PathBuf,
     pub stats_path: PathBuf,
     pub perf_data_path: PathBuf,
-    pub samply_profile_path: PathBuf,
     pub flamegraph_path: PathBuf,
 }
 
@@ -125,9 +124,6 @@ impl BenchmarkInstanceFolder {
         let mut perf_data_path = base_folder.clone();
         perf_data_path.push("perf.data");
 
-        let mut samply_profile_path = base_folder.clone();
-        samply_profile_path.push("samply_profile.json");
-
         let mut flamegraph_path = base_folder.clone();
         flamegraph_path.push(format!("flamegraph_{}.svg", instance_name));
 
@@ -139,7 +135,6 @@ impl BenchmarkInstanceFolder {
             index_timing_path,
             stats_path,
             perf_data_path,
-            samply_profile_path,
             flamegraph_path,
         })
     }

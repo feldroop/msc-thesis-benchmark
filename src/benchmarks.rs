@@ -542,7 +542,7 @@ fn query_error_rate(
 }
 
 fn threads(suite_config: &BenchmarkSuiteConfig, benchmark_config: &BenchmarkConfig) -> Result<()> {
-    FloxerParameterBenchmark::from_iter([4, 8, 16, 20, 24].into_iter().map(|num_threads| {
+    FloxerParameterBenchmark::from_iter([16, 20, 24, 28].into_iter().map(|num_threads| {
         FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
                 num_threads,

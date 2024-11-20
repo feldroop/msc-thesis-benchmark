@@ -135,7 +135,7 @@ impl FloxerConfig {
             };
 
         if let ProfileConfig::On = profile_config {
-            create_profile(&instance_folder, &self.full_name(benchmark_name))?;
+            create_profile(&instance_folder)?;
         }
 
         let stats_file_str = fs::read_to_string(instance_folder.stats_path)?;
@@ -259,25 +259,7 @@ impl FloxerConfig {
     }
 }
 
-fn create_profile(instance_folder: &BenchmarkInstanceFolder, profile_name: &str) -> Result<()> {
-    let samply_output = Command::new("samply")
-        .arg("import")
-        .arg("--profile-name")
-        .arg(profile_name)
-        .arg("--save-only")
-        .arg("--output")
-        .arg(&instance_folder.samply_profile_path)
-        .arg("--no-open")
-        .arg(&instance_folder.perf_data_path)
-        .output()?;
-
-    if !samply_output.status.success() {
-        bail!(
-            "Samply import failed with the following output: {:?}",
-            samply_output
-        )
-    }
-
+fn create_profile(instance_folder: &BenchmarkInstanceFolder) -> Result<()> {
     let flamegraph_output = Command::new("flamegraph")
         .arg("--deterministic")
         .arg("--perfdata")
