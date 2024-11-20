@@ -501,11 +501,8 @@ fn problem_query(
 ) -> Result<()> {
     let benchmark_config = benchmark_config.with_queries(Queries::ProblemQuery);
 
-    let res = FloxerParameterBenchmark::from_iter((0..10).map(|i| FloxerConfig {
-        algorithm_config: FloxerAlgorithmConfig {
-            num_anchors_per_verification_task: 3_000,
-            ..Default::default()
-        },
+    // do multiple times for non-deterministic bugs like race conditions
+    let res = FloxerParameterBenchmark::from_iter((0..5).map(|i| FloxerConfig {
         name: format!("problem_{i}"),
         ..From::from(&benchmark_config)
     }))

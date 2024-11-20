@@ -51,8 +51,7 @@ pub enum Queries {
     HumanWgsNanoporeSmall,
     Debug,
     ProblemQuery,
-    SimulatedSimple,
-    SimulatedPbSim,
+    Simulated,
 }
 
 impl Queries {
@@ -62,8 +61,7 @@ impl Queries {
             Queries::HumanWgsNanoporeSmall => &suite_config.query_paths.human_wgs_nanopore_small,
             Queries::Debug => &suite_config.query_paths.debug,
             Queries::ProblemQuery => &suite_config.query_paths.problem_query,
-            Queries::SimulatedSimple => &suite_config.query_paths.simulated_simple,
-            Queries::SimulatedPbSim => &suite_config.query_paths.simulated_pbsim,
+            Queries::Simulated => &suite_config.query_paths.simulated,
         }
     }
 
@@ -73,8 +71,7 @@ impl Queries {
             Queries::HumanWgsNanoporeSmall => "map-ont",
             Queries::Debug => "map-ont",
             Queries::ProblemQuery => "map-ont",
-            Queries::SimulatedSimple => "map-ont",
-            Queries::SimulatedPbSim => "map-ont",
+            Queries::Simulated => "map-ont",
         }
     }
 

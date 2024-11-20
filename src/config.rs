@@ -33,8 +33,7 @@ pub struct QueryPaths {
     pub human_wgs_nanopore_small: PathBuf,
     pub debug: PathBuf,
     pub problem_query: PathBuf,
-    pub simulated_simple: PathBuf,
-    pub simulated_pbsim: PathBuf,
+    pub simulated: PathBuf,
 }
 
 impl BenchmarkSuiteConfig {
