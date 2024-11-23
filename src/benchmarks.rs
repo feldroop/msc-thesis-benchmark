@@ -24,6 +24,7 @@ pub enum Benchmark {
     AnchorGroupOrder,
     AnchorsPerVerificationTask,
     Debug,
+    DefaultParams,
     ExtraVerificationRatio,
     IndexBuild,
     IntervalOptimization,
@@ -57,6 +58,7 @@ impl Benchmark {
                 anchors_per_verification_task(suite_config, benchmark_config)
             }
             Benchmark::Debug => debug_benchmark(suite_config, benchmark_config),
+            Benchmark::DefaultParams => default_params(suite_config, benchmark_config),
             Benchmark::ExtraVerificationRatio => {
                 extra_verification_ratio(suite_config, benchmark_config)
             }
@@ -280,11 +282,26 @@ fn debug_benchmark(
     Ok(())
 }
 
+fn default_params(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
+    let res = FloxerParameterBenchmark::from_iter([FloxerConfig::from(benchmark_config)])
+        .name("default")
+        .run(suite_config, benchmark_config)?;
+
+    res.plot_seed_stats(suite_config);
+    res.plot_anchor_stats(suite_config);
+    res.plot_alignment_stats(suite_config);
+
+    Ok(())
+}
+
 fn extra_verification_ratio(
     suite_config: &BenchmarkSuiteConfig,
     benchmark_config: &BenchmarkConfig,
 ) -> Result<()> {
-    let res = FloxerParameterBenchmark::from_iter([0.01, 0.02, 0.05, 0.1, 0.2].into_iter().map(
+    let res = FloxerParameterBenchmark::from_iter([0.02, 0.05, 0.1, 0.2, 0.3].into_iter().map(
         |extra_verification_ratio| FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
                 extra_verification_ratio,
