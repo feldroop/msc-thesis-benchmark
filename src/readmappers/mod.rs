@@ -24,7 +24,7 @@ fn add_time_args(command: &mut Command, timing_path: &Path) {
         .arg(TIME_TOOL_FORMAT_STRING);
 }
 
-#[derive(Debug, Default, Copy, Clone, ValueEnum, Display)]
+#[derive(Debug, Default, Copy, Clone, ValueEnum, Display, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
 pub enum Reference {
     #[default]
@@ -43,7 +43,7 @@ impl Reference {
     }
 }
 
-#[derive(Debug, Default, Copy, Clone, ValueEnum, Display)]
+#[derive(Debug, Default, Copy, Clone, ValueEnum, Display, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
 pub enum Queries {
     #[default]

@@ -1,6 +1,7 @@
 use std::{fs, process::Command};
 
 use crate::{
+    analyze_mapped_reads::verify_simulated_dataset,
     cli::BenchmarkConfig,
     config::BenchmarkSuiteConfig,
     folder_structure::{BenchmarkFolder, BenchmarkInstanceFolder},
@@ -59,6 +60,13 @@ impl MinimapConfig {
         };
         let map_timings_file_str = fs::read_to_string(&instance_folder.timing_path)?;
         let map_resource_metrics: ResourceMetrics = toml::from_str(&map_timings_file_str)?;
+
+        if self.queries == Queries::Simulated && self.reference == Reference::Simulated {
+            let verification_summary =
+                verify_simulated_dataset(&instance_folder.mapped_reads_bam_path, suite_config)?;
+
+            verification_summary.print_if_missed();
+        }
 
         Ok(MinimapRunResult {
             map_resource_metrics,

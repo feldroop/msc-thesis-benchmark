@@ -1,5 +1,7 @@
 use crate::{
-    analyze_mapped_reads::{analyze_alignments_simple, SimpleMappedReadsStats},
+    analyze_mapped_reads::{
+        analyze_alignments_simple, verify_simulated_dataset, SimpleMappedReadsStats,
+    },
     benchmarks::ProfileConfig,
     cli::BenchmarkConfig,
     config::BenchmarkSuiteConfig,
@@ -76,9 +78,9 @@ impl Default for FloxerAlgorithmConfig {
             anchor_group_order: AnchorGroupOrder::CountFirst,
             pex_tree_construction: PexTreeConstruction::BottomUp,
             interval_optimization: IntervalOptimization::On,
-            extra_verification_ratio: 0.05,
+            extra_verification_ratio: 0.1,
             verification_algorithm: VerificationAlgorithm::Hierarchical,
-            num_anchors_per_verification_task: 10_000,
+            num_anchors_per_verification_task: 3_000,
             num_threads: super::NUM_THREADS_FOR_READMAPPERS,
         }
     }
@@ -144,7 +146,14 @@ impl FloxerConfig {
         let timings_file_str = fs::read_to_string(instance_folder.timing_path)?;
         let resource_metrics: ResourceMetrics = toml::from_str(&timings_file_str)?;
 
-        let mapped_read_stats = analyze_alignments_simple(instance_folder.mapped_reads_bam_path)?;
+        let mapped_read_stats = analyze_alignments_simple(&instance_folder.mapped_reads_bam_path)?;
+
+        if self.queries == Queries::Simulated && self.reference == Reference::Simulated {
+            let verification_summary =
+                verify_simulated_dataset(&instance_folder.mapped_reads_bam_path, suite_config)?;
+
+            verification_summary.print_if_missed();
+        }
 
         Ok(FloxerRunResult {
             benchmark_instance_name: self.name.clone(),

@@ -122,3 +122,82 @@ pub struct ScopedStats {
     pub average_longest_indel: f64,
     pub average_error_rate_of_primary_basic_alignments: f64,
 }
+
+// ----- for simulate dataset -----
+
+pub fn verify_simulated_dataset(
+    mapped_reads_path: &Path,
+    suite_config: &BenchmarkSuiteConfig,
+) -> Result<SimulatedDatasetVerificationSummary> {
+    let output = Command::new(&suite_config.simulated_dataset_binary)
+        .arg("verify")
+        .arg("--alignments")
+        .arg(mapped_reads_path)
+        .output()?;
+
+    if !output.status.success() {
+        bail!(
+            "Failed to verify mapped reads of simulated data set with stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    let str_data = String::from_utf8(output.stdout)?;
+    let data: VerifiedSimulatedDataset = toml::from_str(&str_data)?;
+
+    let mut summary = SimulatedDatasetVerificationSummary {
+        num_optimal_mapped: 0,
+        suboptimal_mapped_queries: Vec::new(),
+        unmapped_queries: Vec::new(),
+    };
+
+    for query in data.queries {
+        match query.status {
+            MappingStatus::NotFound => summary.unmapped_queries.push(query),
+            MappingStatus::FoundOptimal => summary.num_optimal_mapped += 1,
+            MappingStatus::FoundSuboptimal { .. } => summary.suboptimal_mapped_queries.push(query),
+        }
+    }
+
+    Ok(summary) // TODO integrate this somewhere to happen automatically
+}
+
+pub struct SimulatedDatasetVerificationSummary {
+    num_optimal_mapped: usize,
+    suboptimal_mapped_queries: Vec<VerifiedSimulatedQuery>,
+    unmapped_queries: Vec<VerifiedSimulatedQuery>,
+}
+
+impl SimulatedDatasetVerificationSummary {
+    pub fn print_if_missed(&self) {
+        for query in self
+            .unmapped_queries
+            .iter()
+            .chain(&self.suboptimal_mapped_queries)
+        {
+            println!("Query {}: {:?}", query.id, query.status);
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct VerifiedSimulatedDataset {
+    queries: Vec<VerifiedSimulatedQuery>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct VerifiedSimulatedQuery {
+    id: String,
+    status: MappingStatus,
+}
+
+#[derive(Debug, Deserialize)]
+pub enum MappingStatus {
+    NotFound,
+    FoundOptimal,
+    #[allow(unused)]
+    FoundSuboptimal {
+        pos_diff_expected_num_errors: usize,
+        pos_diff_higher_num_errors: usize,
+    },
+}
