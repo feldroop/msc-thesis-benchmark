@@ -56,7 +56,7 @@ pub struct FloxerAlgorithmConfig {
     pub index_strategy: IndexStrategy,
     pub query_errors: QueryErrors,
     pub pex_seed_errors: u8,
-    pub max_num_anchors: u32,
+    pub max_num_anchors: u64,
     pub anchor_group_order: AnchorGroupOrder,
     pub pex_tree_construction: PexTreeConstruction,
     pub interval_optimization: IntervalOptimization,
@@ -67,6 +67,7 @@ pub struct FloxerAlgorithmConfig {
 }
 
 pub const DEFAULT_ERROR_RATE: f64 = 0.09;
+pub const HIGH_ERROR_RATE: f64 = 0.15;
 
 impl Default for FloxerAlgorithmConfig {
     fn default() -> Self {

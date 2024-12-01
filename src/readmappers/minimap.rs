@@ -63,7 +63,7 @@ impl MinimapConfig {
 
         if self.queries == Queries::Simulated && self.reference == Reference::Simulated {
             let verification_summary =
-                verify_simulated_dataset(&instance_folder.mapped_reads_bam_path, suite_config)?;
+                verify_simulated_dataset(&instance_folder.mapped_reads_sam_path, suite_config)?;
 
             verification_summary.print_if_missed();
         }
@@ -84,7 +84,7 @@ impl MinimapConfig {
         index_path.push(index_file_name);
 
         let build_index =
-            self.index_strategy == IndexStrategy::ReadFromDiskIfStored || !index_path.exists();
+            self.index_strategy == IndexStrategy::AlwaysRebuild || !index_path.exists();
 
         if build_index {
             let mut index_command = Command::new("/usr/bin/time");

@@ -96,31 +96,31 @@ pub struct DetailedMappedReadsComparison {
     pub minimap_stats_if_only_minimap_mapped: ScopedStats,
 }
 
+// all i64 to allow simple use of the charming API
 #[derive(Debug, Deserialize)]
+#[allow(unused)]
 pub struct FullStats {
-    pub number_of_queries: usize,
-    pub both_mapped: usize,
-    pub both_unmapped: usize,
-    pub floxer_mapped: usize,
-    pub floxer_unmapped: usize,
-    pub minimap_mapped: usize,
-    pub minimap_unmapped: usize,
-    pub floxer_unmapped_and_minimap_mapped: usize,
-    pub minimap_unmapped_and_floxer_mapped: usize,
+    pub number_of_queries: i64,
+    pub both_mapped: i64,
+    pub both_unmapped: i64,
+    pub floxer_mapped: i64,
+    pub floxer_unmapped: i64,
+    pub minimap_mapped: i64,
+    pub minimap_unmapped: i64,
+    pub floxer_unmapped_and_minimap_mapped: i64,
+    pub minimap_unmapped_and_floxer_mapped: i64,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ScopedStats {
-    pub num_queries: usize,
-    pub primary_chimeric: usize,
-    pub primary_linear_basic: usize,
-    pub primary_linear_clipped: usize,
-    pub primary_high_edit_distance: usize,
-    pub primary_inversion: usize,
-    pub multiple_mapping: usize,
-    pub primary_not_basic_secondary_basic: usize,
-    pub average_longest_indel: f64,
-    pub average_error_rate_of_primary_basic_alignments: f64,
+    pub num_queries: i64,
+    pub num_best_chimeric_or_inversion: i64,
+    pub num_best_significantly_clipped: i64,
+    pub num_best_high_edit_distance: i64,
+    pub num_basic: i64,
+    pub multiple_mapping: i64,
+    pub basic_average_longest_indel: f64,
+    pub basic_alignments_average_error_rate: f64,
 }
 
 // ----- for simulate dataset -----
@@ -133,6 +133,8 @@ pub fn verify_simulated_dataset(
         .arg("verify")
         .arg("--alignments")
         .arg(mapped_reads_path)
+        .arg("--allowed-pos-diff")
+        .arg("100")
         .output()?;
 
     if !output.status.success() {
@@ -159,7 +161,7 @@ pub fn verify_simulated_dataset(
         }
     }
 
-    Ok(summary) // TODO integrate this somewhere to happen automatically
+    Ok(summary)
 }
 
 pub struct SimulatedDatasetVerificationSummary {
@@ -197,7 +199,7 @@ pub enum MappingStatus {
     FoundOptimal,
     #[allow(unused)]
     FoundSuboptimal {
-        pos_diff_expected_num_errors: usize,
-        pos_diff_higher_num_errors: usize,
+        pos_diff_expected_num_errors: u64,
+        pos_diff_higher_num_errors: u64,
     },
 }

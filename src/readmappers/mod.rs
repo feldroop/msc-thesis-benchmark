@@ -52,6 +52,7 @@ pub enum Queries {
     Debug,
     ProblemQuery,
     Simulated,
+    SimulatedSmall,
 }
 
 impl Queries {
@@ -62,6 +63,7 @@ impl Queries {
             Queries::Debug => &suite_config.query_paths.debug,
             Queries::ProblemQuery => &suite_config.query_paths.problem_query,
             Queries::Simulated => &suite_config.query_paths.simulated,
+            Queries::SimulatedSmall => &suite_config.query_paths.simulated_small,
         }
     }
 
@@ -72,6 +74,7 @@ impl Queries {
             Queries::Debug => "map-ont",
             Queries::ProblemQuery => "map-ont",
             Queries::Simulated => "map-ont",
+            Queries::SimulatedSmall => "map-ont",
         }
     }
 
@@ -81,7 +84,7 @@ impl Queries {
                 Queries::HumanWgsNanoporeSmall
             }
             Queries::Debug | Queries::ProblemQuery => *self,
-            _ => panic!("No smaller equivalent for given query set: {}", self),
+            Queries::Simulated | Queries::SimulatedSmall => Queries::SimulatedSmall,
         }
     }
 }

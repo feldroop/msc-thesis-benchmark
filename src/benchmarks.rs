@@ -30,7 +30,11 @@ pub enum Benchmark {
     IntervalOptimization,
     MaxAnchors,
     Minimap,
+    MinimapHighErrorRate,
     PexSeedErrors,
+    PexSeedErrorsHighErrorRate,
+    PexSeedErrorsNoMaxAnchors,
+    PexSeedErrorsNoMaxAnchorsAndHighErrorRate,
     PexTreeBuilding,
     ProblemQuery,
     Profile,
@@ -68,7 +72,19 @@ impl Benchmark {
             }
             Benchmark::MaxAnchors => max_anchors(suite_config, benchmark_config),
             Benchmark::Minimap => minimap(suite_config, benchmark_config),
+            Benchmark::MinimapHighErrorRate => {
+                minimap_high_error_rate(suite_config, benchmark_config)
+            }
             Benchmark::PexSeedErrors => pex_seed_errors(suite_config, benchmark_config),
+            Benchmark::PexSeedErrorsHighErrorRate => {
+                pex_seed_errors_high_error_rate(suite_config, benchmark_config)
+            }
+            Benchmark::PexSeedErrorsNoMaxAnchors => {
+                pex_seed_errors_no_max_anchors(suite_config, benchmark_config)
+            }
+            Benchmark::PexSeedErrorsNoMaxAnchorsAndHighErrorRate => {
+                pex_seed_errors_no_max_anchors_and_high_error_rate(suite_config, benchmark_config)
+            }
             Benchmark::PexTreeBuilding => pex_tree_building(suite_config, benchmark_config),
             Benchmark::Profile => profile(suite_config, benchmark_config),
             Benchmark::ProblemQuery => problem_query(suite_config, benchmark_config),
@@ -234,7 +250,7 @@ fn anchors_per_verification_task(
     suite_config: &BenchmarkSuiteConfig,
     benchmark_config: &BenchmarkConfig,
 ) -> Result<()> {
-    FloxerParameterBenchmark::from_iter([3000, 10_000, 1_000_000_000].into_iter().map(
+    FloxerParameterBenchmark::from_iter([1000, 3000, 10_000, 1_000_000_000].into_iter().map(
         |num_anchors_per_verification_task| FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
                 num_anchors_per_verification_task,
@@ -389,16 +405,21 @@ fn max_anchors(
     suite_config: &BenchmarkSuiteConfig,
     benchmark_config: &BenchmarkConfig,
 ) -> Result<()> {
-    let res = FloxerParameterBenchmark::from_iter([20, 50, 100, 200].into_iter().map(
-        |max_num_anchors| FloxerConfig {
+    let mut values = vec![20, 50, 100, 200, 1000];
+    if benchmark_config.reference == Reference::Simulated {
+        values.push(u64::MAX);
+    }
+
+    let res = FloxerParameterBenchmark::from_iter(values.into_iter().map(|max_num_anchors| {
+        FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
                 max_num_anchors,
                 ..Default::default()
             },
             name: format!("max_anchors_{max_num_anchors}"),
             ..From::from(benchmark_config)
-        },
-    ))
+        }
+    }))
     .name("max_anchors")
     .run(suite_config, benchmark_config)?;
 
@@ -429,11 +450,11 @@ fn minimap(suite_config: &BenchmarkSuiteConfig, benchmark_config: &BenchmarkConf
         suite_config,
     );
 
-    let mut floxer_mapped_reads_path = folder.get().to_owned();
+    let mut floxer_mapped_reads_path = folder.most_recect_previous_run_folder();
     floxer_mapped_reads_path.push("floxer");
     floxer_mapped_reads_path.push("mapped_reads.bam");
 
-    let mut minimap_mapped_reads_path = folder.get().to_owned();
+    let mut minimap_mapped_reads_path = folder.most_recect_previous_run_folder();
     minimap_mapped_reads_path.push("minimap");
     minimap_mapped_reads_path.push("mapped_reads.sam");
 
@@ -445,11 +466,67 @@ fn minimap(suite_config: &BenchmarkSuiteConfig, benchmark_config: &BenchmarkConf
         suite_config,
     )?;
 
-    // TODO function that creates nice visualizations (sankey + more basic)
+    plots::create_floxer_vs_minimap_plots(&aligner_comparison, &folder, suite_config);
 
     Ok(())
 }
 
+fn minimap_high_error_rate(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
+    let benchmark_name = "minimap_high_error_rate";
+    let floxer_instance_name =
+        format!("floxer_query_error_rate_{}", floxer::HIGH_ERROR_RATE).replace('.', "_");
+    let folder = BenchmarkFolder::new(
+        &suite_config.output_folder,
+        benchmark_name,
+        benchmark_config,
+    );
+    let floxer_res = FloxerConfig {
+        name: floxer_instance_name.clone(),
+        algorithm_config: FloxerAlgorithmConfig {
+            query_errors: QueryErrors::Rate(floxer::HIGH_ERROR_RATE),
+            ..Default::default()
+        },
+        ..From::from(benchmark_config)
+    }
+    .run(&folder, benchmark_name, suite_config, ProfileConfig::Off)?;
+
+    let minimap_res = MinimapConfig::from(benchmark_config).run(&folder, suite_config)?;
+
+    plots::plot_resource_metrics(
+        benchmark_name,
+        [
+            (&floxer_res.resource_metrics, floxer_instance_name.as_str()),
+            (&minimap_res.map_resource_metrics, "minimap"),
+        ],
+        &folder,
+        suite_config,
+    );
+
+    let mut floxer_mapped_reads_path = folder.most_recect_previous_run_folder();
+    floxer_mapped_reads_path.push(floxer_instance_name);
+    floxer_mapped_reads_path.push("mapped_reads.bam");
+
+    let mut minimap_mapped_reads_path = folder.most_recect_previous_run_folder();
+    minimap_mapped_reads_path.push("minimap");
+    minimap_mapped_reads_path.push("mapped_reads.sam");
+
+    let aligner_comparison = analyze_alignments_detailed_comparison(
+        &floxer_mapped_reads_path,
+        &minimap_mapped_reads_path,
+        floxer::HIGH_ERROR_RATE,
+        &folder,
+        suite_config,
+    )?;
+
+    plots::create_floxer_vs_minimap_plots(&aligner_comparison, &folder, suite_config);
+
+    Ok(())
+}
+
+// some code duplication here for the pex seed, but I'll live with it for now.
 fn pex_seed_errors(
     suite_config: &BenchmarkSuiteConfig,
     benchmark_config: &BenchmarkConfig,
@@ -467,6 +544,87 @@ fn pex_seed_errors(
 
     res.plot_seed_stats(suite_config);
     res.plot_anchor_stats(suite_config);
+    res.plot_alignment_stats(suite_config);
+
+    Ok(())
+}
+
+fn pex_seed_errors_high_error_rate(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
+    // number of matched starts to significantly decline at 0.17 (0.16 lost exactly one query)
+    let res = FloxerParameterBenchmark::from_iter((0..4).map(|pex_seed_errors| FloxerConfig {
+        algorithm_config: FloxerAlgorithmConfig {
+            query_errors: QueryErrors::Rate(0.17),
+            pex_seed_errors,
+            ..Default::default()
+        },
+        name: format!("pex_seed_errors_{pex_seed_errors}"),
+        ..From::from(benchmark_config)
+    }))
+    .name("pex_seed_errors_high_error_rate")
+    .run(suite_config, benchmark_config)?;
+
+    res.plot_seed_stats(suite_config);
+    res.plot_anchor_stats(suite_config);
+    res.plot_alignment_stats(suite_config);
+
+    Ok(())
+}
+
+fn pex_seed_errors_no_max_anchors(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
+    if benchmark_config.reference == Reference::HumanGenomeHg38 {
+        bail!("no_max_anchors benchmark skipped for real human genome (repeats would cause ENORMOUS performance issues without max anchors)");
+    }
+
+    let res = FloxerParameterBenchmark::from_iter((0..4).map(|pex_seed_errors| FloxerConfig {
+        algorithm_config: FloxerAlgorithmConfig {
+            max_num_anchors: u64::MAX,
+            pex_seed_errors,
+            ..Default::default()
+        },
+        name: format!("pex_seed_errors_{pex_seed_errors}"),
+        ..From::from(benchmark_config)
+    }))
+    .name("pex_seed_errors_no_max_anchors")
+    .run(suite_config, benchmark_config)?;
+
+    res.plot_seed_stats(suite_config);
+    res.plot_anchor_stats(suite_config);
+    res.plot_alignment_stats(suite_config);
+
+    Ok(())
+}
+
+fn pex_seed_errors_no_max_anchors_and_high_error_rate(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
+    if benchmark_config.reference == Reference::HumanGenomeHg38 {
+        bail!("no_max_anchors benchmark skipped for real human genome (repeats would cause ENORMOUS performance issues without max anchors)");
+    }
+
+    // 0 skipped, because it takes over 1 TB of space
+    let res = FloxerParameterBenchmark::from_iter((1..4).map(|pex_seed_errors| FloxerConfig {
+        algorithm_config: FloxerAlgorithmConfig {
+            max_num_anchors: u64::MAX,
+            query_errors: QueryErrors::Rate(0.17),
+            pex_seed_errors,
+            ..Default::default()
+        },
+        name: format!("pex_seed_errors_{pex_seed_errors}"),
+        ..From::from(benchmark_config)
+    }))
+    .name("pex_seed_errors_no_max_anchors_and_high_error_rate")
+    .run(suite_config, benchmark_config)?;
+
+    res.plot_seed_stats(suite_config);
+    res.plot_anchor_stats(suite_config);
+    res.plot_alignment_stats(suite_config);
 
     Ok(())
 }

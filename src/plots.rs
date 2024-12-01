@@ -1,7 +1,7 @@
 use std::fs;
 
 use crate::{
-    analyze_mapped_reads::SimpleMappedReadsStats,
+    analyze_mapped_reads::{DetailedMappedReadsComparison, SimpleMappedReadsStats},
     config::BenchmarkSuiteConfig,
     folder_structure::BenchmarkFolder,
     readmappers::{floxer::HistogramData, ResourceMetrics},
@@ -14,10 +14,10 @@ use charming::{
     Chart, ImageRenderer,
 };
 
-static TITLE_FONT_SIZE: u8 = 25;
 static SUBTITLE_FONT_SIZE: u8 = 20;
 static LABEL_FONT_SIZE: u8 = 15;
 static GRID_OUTERMOST_OFFSET: usize = 6;
+static JS_FLOAT_FORMATTER: &str = "function (param) { return param.data.toFixed(2); }";
 
 pub fn plot_resource_metrics<'a>(
     benchmark_name: &str,
@@ -28,7 +28,6 @@ pub fn plot_resource_metrics<'a>(
     let offset_str = "54%";
 
     let mut chart = Chart::new()
-        .title(Title::new().text(format!("Resource Usage For {}", benchmark_name)))
         .legend(Legend::new().right("10%"))
         .grid(Grid::new().right(offset_str))
         .grid(Grid::new().left(offset_str))
@@ -114,8 +113,6 @@ pub fn plot_mapped_reads_stats<'a, S>(
         .collect();
 
     let chart = Chart::new()
-        .title(Title::new().text(title))
-        // .legend(Legend::new().right("10%"))
         .grid(Grid::new().right(offset_str))
         .grid(Grid::new().left(offset_str))
         .background_color("white")
@@ -143,9 +140,7 @@ pub fn plot_mapped_reads_stats<'a, S>(
                     Label::new()
                         .show(true)
                         .position(LabelPosition::Top)
-                        .formatter(Formatter::Function(
-                            "function (param) { return param.data.toFixed(2); }".into(),
-                        )),
+                        .formatter(Formatter::Function(JS_FLOAT_FORMATTER.into())),
                 ),
         );
 
@@ -179,16 +174,16 @@ pub fn plot_histogram_data_in_grid<'a, I, S1, S2>(
         .map(|run| run.into_iter().collect())
         .collect();
 
-    let mut x_max_per_metric = Vec::new();
+    let mut y_max_per_metric = Vec::new();
     for metric_index in 0..(runs[0].len()) {
-        let x_max = runs
+        let y_max = runs
             .iter()
             .map(|run| {
                 nice_upper_bound(*run[metric_index].occurrences.iter().max().unwrap()) as i32
             })
             .max()
             .unwrap();
-        x_max_per_metric.push(x_max);
+        y_max_per_metric.push(y_max);
     }
 
     let num_columns = runs.len();
@@ -213,15 +208,8 @@ pub fn plot_histogram_data_in_grid<'a, I, S1, S2>(
         .collect();
 
     let mut chart = Chart::new()
-        .title(
-            Title::new()
-                .text(title)
-                .left("center")
-                .text_style(TextStyle::new().font_size(TITLE_FONT_SIZE)),
-        )
         .legend(
             Legend::new()
-                .right("right")
                 .text_style(TextStyle::new().font_size(SUBTITLE_FONT_SIZE))
                 .top("top"),
         )
@@ -267,7 +255,7 @@ pub fn plot_histogram_data_in_grid<'a, I, S1, S2>(
                 histogram,
                 &metric_names[row_index],
                 index as i32,
-                x_max_per_metric[row_index],
+                y_max_per_metric[row_index],
             );
         }
     }
@@ -348,7 +336,7 @@ fn add_histogram_data_to_chart(
     histogram: &HistogramData,
     name: &str,
     index: i32,
-    max_x: i32,
+    max_y: i32,
 ) -> Chart {
     let x_axis_name = if let Some(descriptive_stats) = &histogram.descriptive_stats {
         format!(
@@ -374,7 +362,7 @@ fn add_histogram_data_to_chart(
                 .name(format!("Occurrences (total: {})", histogram.num_values))
                 .name_text_style(TextStyle::new().font_size(LABEL_FONT_SIZE))
                 .grid_index(index)
-                .max(max_x),
+                .max(max_y),
         )
         .series(
             Bar::new()
@@ -383,6 +371,203 @@ fn add_histogram_data_to_chart(
                 .x_axis_index(index)
                 .y_axis_index(index),
         )
+}
+
+pub fn create_floxer_vs_minimap_plots(
+    data: &DetailedMappedReadsComparison,
+    benchmark_folder: &BenchmarkFolder,
+    suite_config: &BenchmarkSuiteConfig,
+) {
+    let num_total_queries = data.general_stats.number_of_queries;
+    let minimap_data = &data.minimap_stats_if_minimap_mapped;
+    let only_minimap_data = &data.minimap_stats_if_only_minimap_mapped;
+    let both_data = &data.minimap_stats_if_both_mapped;
+    let floxer_data = &data.floxer_stats_if_floxer_mapped;
+
+    let mapping_status_chart = Chart::new()
+        .legend(Legend::new().right("10%"))
+        .background_color("white")
+        .x_axis(Axis::new().data(vec![
+            "Minimap",
+            "Floxer",
+            "Both mapped",
+            "Only Minimap",
+            "Only Floxer",
+        ]))
+        .y_axis(Axis::new())
+        .series(
+            Bar::new()
+                .stack("all")
+                .name("linear simple mapped")
+                .data(vec![
+                    minimap_data.num_basic,
+                    floxer_data.num_basic,
+                    both_data.num_basic,
+                    only_minimap_data.num_basic,
+                    data.general_stats.minimap_unmapped_and_floxer_mapped,
+                ])
+                .label(Label::new().show(true).position(LabelPosition::Inside)),
+        )
+        .series(
+            Bar::new()
+                .stack("all")
+                .name("linear large clipping mapped")
+                .data(vec![
+                    minimap_data.num_best_significantly_clipped,
+                    floxer_data.num_best_significantly_clipped,
+                    both_data.num_best_significantly_clipped,
+                    only_minimap_data.num_best_significantly_clipped,
+                ])
+                .label(Label::new().show(true).position(LabelPosition::Inside)),
+        )
+        .series(
+            Bar::new()
+                .stack("all")
+                .name("linear large error rate mapped")
+                .data(vec![
+                    minimap_data.num_best_high_edit_distance,
+                    floxer_data.num_best_high_edit_distance,
+                    both_data.num_best_high_edit_distance,
+                    only_minimap_data.num_best_high_edit_distance,
+                ])
+                .label(Label::new().show(true).position(LabelPosition::Inside)),
+        )
+        .series(
+            Bar::new()
+                .stack("all")
+                .name("chimeric or inversion mapped")
+                .data(vec![
+                    minimap_data.num_best_chimeric_or_inversion,
+                    floxer_data.num_best_chimeric_or_inversion,
+                    both_data.num_best_chimeric_or_inversion,
+                    only_minimap_data.num_best_chimeric_or_inversion,
+                ])
+                .label(Label::new().show(true).position(LabelPosition::Inside)),
+        )
+        .series(
+            Bar::new()
+                .stack("all")
+                .name("unmapped")
+                .data(vec![
+                    num_total_queries - minimap_data.num_queries,
+                    num_total_queries - floxer_data.num_queries,
+                ])
+                .label(Label::new().show(true).position(LabelPosition::Inside)),
+        );
+
+    // 15478 minimap whre did I lose?
+    // 15513 floxer
+    // TODO what went wrong?
+
+    save_chart(
+        mapping_status_chart,
+        "mapping_status_comparison".into(),
+        800,
+        800,
+        benchmark_folder,
+        suite_config,
+    );
+
+    let multiple_mapping_data = vec![
+        minimap_data.multiple_mapping,
+        floxer_data.multiple_mapping,
+        both_data.multiple_mapping,
+        only_minimap_data.multiple_mapping,
+    ];
+
+    let single_mapping_data = vec![
+        data.general_stats.minimap_mapped - minimap_data.multiple_mapping,
+        data.general_stats.floxer_mapped - floxer_data.multiple_mapping,
+        data.general_stats.both_mapped - both_data.multiple_mapping,
+        data.general_stats.floxer_unmapped_and_minimap_mapped - only_minimap_data.multiple_mapping,
+    ];
+
+    // TODO change to fing the error rate + largest indel if there is a basic alignment
+    let avg_error_rate_data = vec![
+        minimap_data.basic_alignments_average_error_rate,
+        floxer_data.basic_alignments_average_error_rate,
+    ];
+    let largest_indel_data = vec![
+        minimap_data.basic_average_longest_indel,
+        floxer_data.basic_average_longest_indel,
+    ];
+
+    let default_offset_str = format!("{GRID_OUTERMOST_OFFSET}%");
+    let alignment_characteristics_chart = Chart::new()
+        .legend(Legend::new().right("10%"))
+        .background_color("white")
+        .grid(Grid::new().left(default_offset_str.as_str()).right("70%"))
+        .x_axis(
+            Axis::new()
+                .grid_index(0)
+                .data(vec!["Minimap", "Floxer", "Both", "Only Minimap"]),
+        )
+        .y_axis(Axis::new().grid_index(0).name("number of alignments"))
+        .grid(Grid::new().left("35%").right("35%"))
+        .x_axis(Axis::new().grid_index(1).data(vec!["Minimap", "Floxer"]))
+        .y_axis(
+            Axis::new()
+                .grid_index(1)
+                .name("avg. alignment error rate (only simple)"),
+        )
+        .grid(Grid::new().left("70%").right(default_offset_str.as_str()))
+        .x_axis(Axis::new().grid_index(2).data(vec!["Minimap", "Floxer"]))
+        .y_axis(
+            Axis::new()
+                .grid_index(2)
+                .name("avg. largest indel in alignment (only simple)"),
+        )
+        .series(
+            Bar::new()
+                .stack("all")
+                .x_axis_index(0)
+                .y_axis_index(0)
+                .name("multiple mapping")
+                .data(multiple_mapping_data)
+                .label(Label::new().show(true).position(LabelPosition::Inside)),
+        )
+        .series(
+            Bar::new()
+                .stack("all")
+                .x_axis_index(0)
+                .y_axis_index(0)
+                .name("single mapping")
+                .data(single_mapping_data)
+                .label(Label::new().show(true).position(LabelPosition::Inside)),
+        )
+        .series(
+            Bar::new()
+                .x_axis_index(1)
+                .y_axis_index(1)
+                .data(avg_error_rate_data)
+                .label(
+                    Label::new()
+                        .show(true)
+                        .position(LabelPosition::Top)
+                        .formatter(Formatter::Function(JS_FLOAT_FORMATTER.into())),
+                ),
+        )
+        .series(
+            Bar::new()
+                .x_axis_index(2)
+                .y_axis_index(2)
+                .data(largest_indel_data)
+                .label(
+                    Label::new()
+                        .show(true)
+                        .position(LabelPosition::Top)
+                        .formatter(Formatter::Function(JS_FLOAT_FORMATTER.into())),
+                ),
+        );
+
+    save_chart(
+        alignment_characteristics_chart,
+        "alignment_characteristics_comparison".into(),
+        1600,
+        800,
+        benchmark_folder,
+        suite_config,
+    );
 }
 
 fn save_chart(

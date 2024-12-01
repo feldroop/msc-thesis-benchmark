@@ -35,6 +35,7 @@ pub struct QueryPaths {
     pub debug: PathBuf,
     pub problem_query: PathBuf,
     pub simulated: PathBuf,
+    pub simulated_small: PathBuf,
 }
 
 impl BenchmarkSuiteConfig {
