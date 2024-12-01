@@ -1,6 +1,7 @@
 use std::{path::Path, process::Command};
 
 use clap::ValueEnum;
+use floxer::StatsInputHint;
 use serde::Deserialize;
 use strum::Display;
 
@@ -85,6 +86,17 @@ impl Queries {
             }
             Queries::Debug | Queries::ProblemQuery => *self,
             Queries::Simulated | Queries::SimulatedSmall => Queries::SimulatedSmall,
+        }
+    }
+
+    fn floxer_stats_input_hint(&self) -> Option<StatsInputHint> {
+        match self {
+            Queries::HumanWgsNanopore => Some(StatsInputHint::RealNanopore),
+            Queries::HumanWgsNanoporeSmall => Some(StatsInputHint::RealNanopore),
+            Queries::Debug => None,
+            Queries::ProblemQuery => None,
+            Queries::Simulated => Some(StatsInputHint::Simulated),
+            Queries::SimulatedSmall => Some(StatsInputHint::Simulated),
         }
     }
 }

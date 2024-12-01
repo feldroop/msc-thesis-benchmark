@@ -123,9 +123,13 @@ pub fn run_all(
     suite_config: &BenchmarkSuiteConfig,
     benchmark_config: &BenchmarkConfig,
 ) -> Result<()> {
-    let skip_for_now: HashSet<_> = [Benchmark::VerificationAlgorithm, Benchmark::ProblemQuery]
-        .into_iter()
-        .collect();
+    let skip_for_now: HashSet<_> = [
+        Benchmark::VerificationAlgorithm,
+        Benchmark::ProblemQuery,
+        Benchmark::PexSeedErrorsNoMaxAnchorsAndHighErrorRate,
+    ]
+    .into_iter()
+    .collect();
 
     run_benchmarks(
         Benchmark::iter().filter(|benchmark| !skip_for_now.contains(benchmark)),
@@ -609,10 +613,11 @@ fn pex_seed_errors_no_max_anchors_and_high_error_rate(
     }
 
     // 0 skipped, because it takes over 1 TB of space
+    // not 0.17 query error rate, because that takes forever (at least half a day)
     let res = FloxerParameterBenchmark::from_iter((1..4).map(|pex_seed_errors| FloxerConfig {
         algorithm_config: FloxerAlgorithmConfig {
             max_num_anchors: u64::MAX,
-            query_errors: QueryErrors::Rate(0.17),
+            query_errors: QueryErrors::Rate(0.15),
             pex_seed_errors,
             ..Default::default()
         },

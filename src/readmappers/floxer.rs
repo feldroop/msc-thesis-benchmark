@@ -51,6 +51,13 @@ pub enum VerificationAlgorithm {
     Hierarchical,
 }
 
+#[derive(Debug, Copy, Clone, Display)]
+#[strum(serialize_all = "snake_case")]
+pub enum StatsInputHint {
+    RealNanopore,
+    Simulated,
+}
+
 #[derive(Debug)]
 pub struct FloxerAlgorithmConfig {
     pub index_strategy: IndexStrategy,
@@ -189,9 +196,11 @@ impl FloxerConfig {
                 command
             }
         };
+
         super::add_time_args(&mut command, &instance_folder.timing_path);
         let reference_path = self.reference.path(suite_config);
         let queries_path = self.queries.path(suite_config);
+
         command
             .arg(&suite_config.readmapper_binaries.floxer)
             .arg("--reference")
@@ -204,6 +213,7 @@ impl FloxerConfig {
             .arg(&instance_folder.logfile_path)
             .arg("--stats")
             .arg(&instance_folder.stats_path);
+
         if self.algorithm_config.index_strategy == IndexStrategy::ReadFromDiskIfStored {
             let mut index_path = suite_config.index_folder();
             let index_file_name = format!("floxer-index-{}.flxi", self.reference);
@@ -212,6 +222,7 @@ impl FloxerConfig {
             command.arg("--index");
             command.arg(index_path);
         }
+
         match self.algorithm_config.query_errors {
             QueryErrors::Exact(num_errors) => {
                 command.args(["--query-errors", &num_errors.to_string()]);
@@ -220,6 +231,7 @@ impl FloxerConfig {
                 command.args(["--error-probability", &error_ratio.to_string()]);
             }
         }
+
         command.args([
             "--seed-errors",
             &self.algorithm_config.pex_seed_errors.to_string(),
@@ -237,19 +249,29 @@ impl FloxerConfig {
                 .num_anchors_per_verification_task
                 .to_string(),
         ]);
+
         if let PexTreeConstruction::BottomUp = self.algorithm_config.pex_tree_construction {
             command.arg("--bottom-up-pex-tree");
         }
+
         if let IntervalOptimization::On = self.algorithm_config.interval_optimization {
             command.args(["--interval-optimization"]);
         }
+
         if let VerificationAlgorithm::DirectFull = self.algorithm_config.verification_algorithm {
             command.arg("--direct-full-verification");
         }
+
+        if let Some(stats_input_hint) = self.queries.floxer_stats_input_hint() {
+            command.arg("--stats-input-hint");
+            command.arg(stats_input_hint.to_string());
+        }
+
         println!(
             "- Running the benchmark: {}",
             self.full_name(benchmark_name)
         );
+
         let floxer_proc_output = command.output()?;
 
         if !floxer_proc_output.status.success()
