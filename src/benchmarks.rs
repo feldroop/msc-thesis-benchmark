@@ -7,7 +7,7 @@ use crate::config::BenchmarkSuiteConfig;
 use crate::folder_structure::BenchmarkFolder;
 use crate::plots;
 use crate::readmappers::floxer::{
-    self, AnchorGroupOrder, FloxerAlgorithmConfig, FloxerConfig, FloxerRunResult,
+    self, AnchorGroupOrder, CigarOutput, FloxerAlgorithmConfig, FloxerConfig, FloxerRunResult,
     IntervalOptimization, PexTreeConstruction, QueryErrors, VerificationAlgorithm,
 };
 use crate::readmappers::minimap::MinimapConfig;
@@ -438,6 +438,7 @@ fn minimap(suite_config: &BenchmarkSuiteConfig, benchmark_config: &BenchmarkConf
     let folder = BenchmarkFolder::new(&suite_config.output_folder, name, benchmark_config);
     let floxer_res = FloxerConfig {
         name: String::from("floxer"),
+        cigar_output: CigarOutput::On,
         ..From::from(benchmark_config)
     }
     .run(&folder, name, suite_config, ProfileConfig::Off)?;
@@ -489,6 +490,7 @@ fn minimap_high_error_rate(
     );
     let floxer_res = FloxerConfig {
         name: floxer_instance_name.clone(),
+        cigar_output: CigarOutput::On,
         algorithm_config: FloxerAlgorithmConfig {
             query_errors: QueryErrors::Rate(floxer::HIGH_ERROR_RATE),
             ..Default::default()
@@ -722,7 +724,7 @@ fn query_error_rate(
 }
 
 fn threads(suite_config: &BenchmarkSuiteConfig, benchmark_config: &BenchmarkConfig) -> Result<()> {
-    FloxerParameterBenchmark::from_iter([16, 20, 24, 28].into_iter().map(|num_threads| {
+    FloxerParameterBenchmark::from_iter([8, 16, 24, 32].into_iter().map(|num_threads| {
         FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
                 num_threads,

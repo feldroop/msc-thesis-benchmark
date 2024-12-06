@@ -58,6 +58,12 @@ pub enum StatsInputHint {
     Simulated,
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum CigarOutput {
+    On,
+    Off,
+}
+
 #[derive(Debug)]
 pub struct FloxerAlgorithmConfig {
     pub index_strategy: IndexStrategy,
@@ -103,6 +109,7 @@ pub struct FloxerConfig {
     pub queries: Queries,
     pub only_analysis: bool,
     pub algorithm_config: FloxerAlgorithmConfig,
+    pub cigar_output: CigarOutput,
 }
 
 impl From<&BenchmarkConfig> for FloxerConfig {
@@ -113,6 +120,7 @@ impl From<&BenchmarkConfig> for FloxerConfig {
             queries: value.queries,
             only_analysis: value.only_analysis,
             algorithm_config: Default::default(),
+            cigar_output: CigarOutput::Off,
         }
     }
 }
@@ -265,6 +273,10 @@ impl FloxerConfig {
         if let Some(stats_input_hint) = self.queries.floxer_stats_input_hint() {
             command.arg("--stats-input-hint");
             command.arg(stats_input_hint.to_string());
+        }
+
+        if let CigarOutput::Off = self.cigar_output {
+            command.arg("--without-cigar");
         }
 
         println!(

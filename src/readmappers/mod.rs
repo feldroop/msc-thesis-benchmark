@@ -15,7 +15,7 @@ user_cpu_seconds = %U
 system_cpu_seconds = %S
 peak_memory_kilobytes = %M";
 
-const NUM_THREADS_FOR_READMAPPERS: u16 = 16;
+const NUM_THREADS_FOR_READMAPPERS: u16 = 32;
 
 fn add_time_args(command: &mut Command, timing_path: &Path) {
     command
