@@ -7,8 +7,8 @@ use crate::config::BenchmarkSuiteConfig;
 use crate::folder_structure::BenchmarkFolder;
 use crate::plots;
 use crate::readmappers::floxer::{
-    self, AnchorGroupOrder, CigarOutput, FloxerAlgorithmConfig, FloxerConfig, FloxerRunResult,
-    IntervalOptimization, PexTreeConstruction, QueryErrors, VerificationAlgorithm,
+    self, AnchorChoiceStrategy, AnchorGroupOrder, CigarOutput, FloxerAlgorithmConfig, FloxerConfig,
+    FloxerRunResult, IntervalOptimization, PexTreeConstruction, QueryErrors, VerificationAlgorithm,
 };
 use crate::readmappers::minimap::MinimapConfig;
 use crate::readmappers::{IndexStrategy, Queries, Reference};
@@ -21,7 +21,7 @@ static UNNAMED_BENCHMARK_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug, Clone, Copy, EnumIter, ValueEnum, PartialEq, Eq, Hash)]
 pub enum Benchmark {
-    AnchorGroupOrder,
+    AnchorGroupOrderAndChoiceStrategy,
     AnchorsPerVerificationTask,
     Debug,
     DefaultParams,
@@ -39,6 +39,7 @@ pub enum Benchmark {
     ProblemQuery,
     Profile,
     QueryErrorRate,
+    SeedSamplingStepSize,
     Threads,
     VerificationAlgorithm,
 }
@@ -57,7 +58,9 @@ impl Benchmark {
         benchmark_config: &BenchmarkConfig,
     ) -> Result<()> {
         match *self {
-            Benchmark::AnchorGroupOrder => anchor_group_order(suite_config, benchmark_config),
+            Benchmark::AnchorGroupOrderAndChoiceStrategy => {
+                anchor_group_order_and_choice_strategy(suite_config, benchmark_config)
+            }
             Benchmark::AnchorsPerVerificationTask => {
                 anchors_per_verification_task(suite_config, benchmark_config)
             }
@@ -89,6 +92,9 @@ impl Benchmark {
             Benchmark::Profile => profile(suite_config, benchmark_config),
             Benchmark::ProblemQuery => problem_query(suite_config, benchmark_config),
             Benchmark::QueryErrorRate => query_error_rate(suite_config, benchmark_config),
+            Benchmark::SeedSamplingStepSize => {
+                seed_sampling_step_size(suite_config, benchmark_config)
+            }
             Benchmark::Threads => threads(suite_config, benchmark_config),
             Benchmark::VerificationAlgorithm => {
                 verification_algorithm(suite_config, benchmark_config)
@@ -123,13 +129,9 @@ pub fn run_all(
     suite_config: &BenchmarkSuiteConfig,
     benchmark_config: &BenchmarkConfig,
 ) -> Result<()> {
-    let skip_for_now: HashSet<_> = [
-        Benchmark::VerificationAlgorithm,
-        Benchmark::ProblemQuery,
-        Benchmark::PexSeedErrorsNoMaxAnchorsAndHighErrorRate,
-    ]
-    .into_iter()
-    .collect();
+    let skip_for_now: HashSet<_> = [Benchmark::VerificationAlgorithm, Benchmark::ProblemQuery]
+        .into_iter()
+        .collect();
 
     run_benchmarks(
         Benchmark::iter().filter(|benchmark| !skip_for_now.contains(benchmark)),
@@ -164,17 +166,38 @@ impl BenchmarkResult {
         plots::plot_histogram_data_in_grid(
             self.floxer_results
                 .iter()
-                .map(|run| run.stats.anchor_stats.iter_histograms()),
-            &format!("{} anchor stats", self.benchmark_name),
+                .map(|run| run.stats.anchor_stats_per_query.iter_histograms()),
+            &format!("{} anchor stats per query", self.benchmark_name),
             self.floxer_results.iter().map(|run| {
                 format!(
                     "{} (#fully exc. query: {})",
-                    run.benchmark_instance_name, run.stats.anchor_stats.completely_excluded_queries
+                    run.benchmark_instance_name,
+                    run.stats.anchor_stats_per_query.completely_excluded_queries
                 )
             }),
             self.floxer_results[0]
                 .stats
-                .anchor_stats
+                .anchor_stats_per_query
+                .iter_metric_names(),
+            &self.folder,
+            suite_config,
+        );
+
+        plots::plot_histogram_data_in_grid(
+            self.floxer_results
+                .iter()
+                .map(|run| run.stats.anchor_stats_per_seed.iter_histograms()),
+            &format!("{} anchor stats per seed", self.benchmark_name),
+            self.floxer_results.iter().map(|run| {
+                format!(
+                    "{} (#fully exc. query: {})",
+                    run.benchmark_instance_name,
+                    run.stats.anchor_stats_per_query.completely_excluded_queries
+                )
+            }),
+            self.floxer_results[0]
+                .stats
+                .anchor_stats_per_seed
                 .iter_metric_names(),
             &self.folder,
             suite_config,
@@ -227,23 +250,44 @@ impl BenchmarkResult {
     }
 }
 
-fn anchor_group_order(
+fn anchor_group_order_and_choice_strategy(
     suite_config: &BenchmarkSuiteConfig,
     benchmark_config: &BenchmarkConfig,
 ) -> Result<()> {
-    let res =
-        FloxerParameterBenchmark::from_iter(AnchorGroupOrder::iter().map(|anchor_group_order| {
-            FloxerConfig {
+    let res = FloxerParameterBenchmark::from_iter(
+        [
+            (
+                AnchorGroupOrder::CountFirst,
+                AnchorChoiceStrategy::RoundRobin,
+            ),
+            (
+                AnchorGroupOrder::CountFirst,
+                AnchorChoiceStrategy::FullGroups,
+            ),
+            (
+                AnchorGroupOrder::ErrorsFirst,
+                AnchorChoiceStrategy::RoundRobin,
+            ),
+            (
+                AnchorGroupOrder::ErrorsFirst,
+                AnchorChoiceStrategy::FullGroups,
+            ),
+        ]
+        .into_iter()
+        .map(
+            |(anchor_group_order, anchor_choice_strategy)| FloxerConfig {
                 algorithm_config: FloxerAlgorithmConfig {
                     anchor_group_order,
+                    anchor_choice_strategy,
                     ..Default::default()
                 },
-                name: anchor_group_order.to_string(),
+                name: format!("{anchor_group_order}_{anchor_choice_strategy}"),
                 ..From::from(benchmark_config)
-            }
-        }))
-        .name("anchor_group_order")
-        .run(suite_config, benchmark_config)?;
+            },
+        ),
+    )
+    .name("anchor_group_order_and_choice_strategy")
+    .run(suite_config, benchmark_config)?;
 
     res.plot_anchor_stats(suite_config);
 
@@ -260,7 +304,7 @@ fn anchors_per_verification_task(
                 num_anchors_per_verification_task,
                 ..Default::default()
             },
-            name: format!("anchors_per_task_{num_anchors_per_verification_task}"),
+            name: num_anchors_per_verification_task.to_string(),
             ..From::from(benchmark_config)
         },
     ))
@@ -327,7 +371,7 @@ fn extra_verification_ratio(
                 extra_verification_ratio,
                 ..Default::default()
             },
-            name: format!("extra_verification_ratio_{extra_verification_ratio}").replace('.', "_"),
+            name: extra_verification_ratio.to_string().replace('.', "_"),
             ..From::from(benchmark_config)
         },
     ))
@@ -409,21 +453,29 @@ fn max_anchors(
     suite_config: &BenchmarkSuiteConfig,
     benchmark_config: &BenchmarkConfig,
 ) -> Result<()> {
-    let mut values = vec![20, 50, 100, 200, 1000];
+    let mut values = vec![
+        (50, 20),
+        (500, 20),
+        (50, 50),
+        (200, 200),
+        (u64::MAX, 50),
+        (u64::MAX, 200),
+    ];
     if benchmark_config.reference == Reference::Simulated {
-        values.push(u64::MAX);
+        values.push((u64::MAX, u64::MAX));
     }
 
-    let res = FloxerParameterBenchmark::from_iter(values.into_iter().map(|max_num_anchors| {
-        FloxerConfig {
+    let res = FloxerParameterBenchmark::from_iter(values.into_iter().map(
+        |(max_num_anchors_hard, max_num_anchors_soft)| FloxerConfig {
             algorithm_config: FloxerAlgorithmConfig {
-                max_num_anchors,
+                max_num_anchors_hard,
+                max_num_anchors_soft,
                 ..Default::default()
             },
-            name: format!("max_anchors_{max_num_anchors}"),
+            name: format!("{max_num_anchors_hard}_{max_num_anchors_soft}"),
             ..From::from(benchmark_config)
-        }
-    }))
+        },
+    ))
     .name("max_anchors")
     .run(suite_config, benchmark_config)?;
 
@@ -542,7 +594,7 @@ fn pex_seed_errors(
             pex_seed_errors,
             ..Default::default()
         },
-        name: format!("pex_seed_errors_{pex_seed_errors}"),
+        name: pex_seed_errors.to_string(),
         ..From::from(benchmark_config)
     }))
     .name("pex_seed_errors")
@@ -566,7 +618,7 @@ fn pex_seed_errors_high_error_rate(
             pex_seed_errors,
             ..Default::default()
         },
-        name: format!("pex_seed_errors_{pex_seed_errors}"),
+        name: pex_seed_errors.to_string(),
         ..From::from(benchmark_config)
     }))
     .name("pex_seed_errors_high_error_rate")
@@ -589,11 +641,12 @@ fn pex_seed_errors_no_max_anchors(
 
     let res = FloxerParameterBenchmark::from_iter((0..4).map(|pex_seed_errors| FloxerConfig {
         algorithm_config: FloxerAlgorithmConfig {
-            max_num_anchors: u64::MAX,
+            max_num_anchors_hard: u64::MAX,
+            max_num_anchors_soft: u64::MAX,
             pex_seed_errors,
             ..Default::default()
         },
-        name: format!("pex_seed_errors_{pex_seed_errors}"),
+        name: pex_seed_errors.to_string(),
         ..From::from(benchmark_config)
     }))
     .name("pex_seed_errors_no_max_anchors")
@@ -618,12 +671,13 @@ fn pex_seed_errors_no_max_anchors_and_high_error_rate(
     // not 0.17 query error rate, because that takes forever (at least half a day)
     let res = FloxerParameterBenchmark::from_iter((1..4).map(|pex_seed_errors| FloxerConfig {
         algorithm_config: FloxerAlgorithmConfig {
-            max_num_anchors: u64::MAX,
+            max_num_anchors_hard: u64::MAX,
+            max_num_anchors_soft: u64::MAX,
             query_errors: QueryErrors::Rate(0.15),
             pex_seed_errors,
             ..Default::default()
         },
-        name: format!("pex_seed_errors_{pex_seed_errors}"),
+        name: pex_seed_errors.to_string(),
         ..From::from(benchmark_config)
     }))
     .name("pex_seed_errors_no_max_anchors_and_high_error_rate")
@@ -655,7 +709,7 @@ fn pex_tree_building(
                 pex_seed_errors,
                 ..Default::default()
             },
-            name: format!("{}_{}_seed_errors", pex_tree_construction, pex_seed_errors),
+            name: format!("{}_{}", pex_tree_construction, pex_seed_errors),
             ..From::from(benchmark_config)
         }),
     )
@@ -685,7 +739,7 @@ fn problem_query(
 
     // do multiple times for non-deterministic bugs like race conditions
     let res = FloxerParameterBenchmark::from_iter((0..5).map(|i| FloxerConfig {
-        name: format!("problem_{i}"),
+        name: i.to_string(),
         ..From::from(&benchmark_config)
     }))
     .name("problem_query")
@@ -710,12 +764,35 @@ fn query_error_rate(
                     query_errors: QueryErrors::Rate(query_error_ratio),
                     ..Default::default()
                 },
-                name: format!("query_error_rate_{query_error_ratio}").replace('.', "_"),
+                name: query_error_ratio.to_string().replace('.', "_"),
                 ..From::from(benchmark_config)
             },
         ))
         .name("query_error_rate")
         .run(suite_config, benchmark_config)?;
+
+    res.plot_seed_stats(suite_config);
+    res.plot_anchor_stats(suite_config);
+
+    Ok(())
+}
+
+fn seed_sampling_step_size(
+    suite_config: &BenchmarkSuiteConfig,
+    benchmark_config: &BenchmarkConfig,
+) -> Result<()> {
+    let res = FloxerParameterBenchmark::from_iter([1, 2, 4, 8, 16].into_iter().map(
+        |seed_sampling_step_size| FloxerConfig {
+            algorithm_config: FloxerAlgorithmConfig {
+                seed_sampling_step_size,
+                ..Default::default()
+            },
+            name: seed_sampling_step_size.to_string(),
+            ..From::from(benchmark_config)
+        },
+    ))
+    .name("seed_sampling_step_size")
+    .run(suite_config, benchmark_config)?;
 
     res.plot_seed_stats(suite_config);
     res.plot_anchor_stats(suite_config);
@@ -730,7 +807,7 @@ fn threads(suite_config: &BenchmarkSuiteConfig, benchmark_config: &BenchmarkConf
                 num_threads,
                 ..Default::default()
             },
-            name: format!("num_threads_{num_threads}"),
+            name: num_threads.to_string(),
             ..From::from(benchmark_config)
         }
     }))

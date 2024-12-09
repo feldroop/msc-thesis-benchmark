@@ -30,6 +30,7 @@ fn add_time_args(command: &mut Command, timing_path: &Path) {
 pub enum Reference {
     #[default]
     HumanGenomeHg38,
+    MaskedHumanGenomeHg38,
     Debug,
     Simulated,
 }
@@ -38,6 +39,9 @@ impl Reference {
     fn path<'a>(&self, suite_config: &'a BenchmarkSuiteConfig) -> &'a Path {
         match self {
             Reference::HumanGenomeHg38 => &suite_config.reference_paths.human_genome_hg38,
+            Reference::MaskedHumanGenomeHg38 => {
+                &suite_config.reference_paths.masked_human_genome_hg38
+            }
             Reference::Debug => &suite_config.reference_paths.debug,
             Reference::Simulated => &suite_config.reference_paths.simulated,
         }

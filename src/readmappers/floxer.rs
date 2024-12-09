@@ -26,7 +26,13 @@ pub enum QueryErrors {
 pub enum AnchorGroupOrder {
     ErrorsFirst,
     CountFirst,
-    Hybrid,
+}
+
+#[derive(Debug, Copy, Clone, EnumIter, Display)]
+#[strum(serialize_all = "snake_case")]
+pub enum AnchorChoiceStrategy {
+    RoundRobin,
+    FullGroups,
 }
 
 #[derive(Debug, Copy, Clone, EnumIter, Display)]
@@ -69,8 +75,11 @@ pub struct FloxerAlgorithmConfig {
     pub index_strategy: IndexStrategy,
     pub query_errors: QueryErrors,
     pub pex_seed_errors: u8,
-    pub max_num_anchors: u64,
+    pub max_num_anchors_hard: u64,
+    pub max_num_anchors_soft: u64,
     pub anchor_group_order: AnchorGroupOrder,
+    pub anchor_choice_strategy: AnchorChoiceStrategy,
+    pub seed_sampling_step_size: u16,
     pub pex_tree_construction: PexTreeConstruction,
     pub interval_optimization: IntervalOptimization,
     pub extra_verification_ratio: f64,
@@ -88,8 +97,11 @@ impl Default for FloxerAlgorithmConfig {
             index_strategy: IndexStrategy::ReadFromDiskIfStored,
             query_errors: QueryErrors::Rate(DEFAULT_ERROR_RATE),
             pex_seed_errors: 2,
-            max_num_anchors: 100,
+            max_num_anchors_hard: u64::MAX,
+            max_num_anchors_soft: 100,
             anchor_group_order: AnchorGroupOrder::CountFirst,
+            anchor_choice_strategy: AnchorChoiceStrategy::RoundRobin,
+            seed_sampling_step_size: 1,
             pex_tree_construction: PexTreeConstruction::BottomUp,
             interval_optimization: IntervalOptimization::On,
             extra_verification_ratio: 0.1,
@@ -243,10 +255,16 @@ impl FloxerConfig {
         command.args([
             "--seed-errors",
             &self.algorithm_config.pex_seed_errors.to_string(),
-            "--max-anchors",
-            &self.algorithm_config.max_num_anchors.to_string(),
+            "--max-anchors-hard",
+            &self.algorithm_config.max_num_anchors_hard.to_string(),
+            "--max-anchors-soft",
+            &self.algorithm_config.max_num_anchors_soft.to_string(),
             "--anchor-group-order",
             &self.algorithm_config.anchor_group_order.to_string(),
+            "--anchor-choice-strategy",
+            &self.algorithm_config.anchor_choice_strategy.to_string(),
+            "--seed-sampling-step-size",
+            &self.algorithm_config.seed_sampling_step_size.to_string(),
             "--extra-verification-ratio",
             &self.algorithm_config.extra_verification_ratio.to_string(),
             "--threads",
@@ -336,7 +354,9 @@ pub struct FloxerStats {
     #[serde(flatten)]
     pub seed_stats: SeedStats,
     #[serde(flatten)]
-    pub anchor_stats: AnchorStats,
+    pub anchor_stats_per_query: AnchorStatsPerQuery,
+    #[serde(flatten)]
+    pub anchor_stats_per_seed: AnchorStatsPerSeed,
     #[serde(flatten)]
     pub alignment_stats: AlignmentStats,
     pub alignments_per_query: HistogramData,
@@ -392,34 +412,58 @@ impl SeedStats {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct AnchorStats {
+pub struct AnchorStatsPerQuery {
     pub completely_excluded_queries: usize,
-    pub anchors_per_non_excluded_seed: HistogramData,
-    pub kept_anchors_per_partly_excluded_seed: HistogramData,
-    pub raw_anchors_per_fully_excluded_seed: HistogramData,
-    pub anchors_per_query_from_non_excluded_seeds: HistogramData,
-    pub excluded_raw_anchors_per_query: HistogramData,
+    pub fully_excluded_seeds_per_query: HistogramData,
+    pub kept_anchors_per_query: HistogramData,
+    pub excluded_raw_anchors_by_soft_cap_per_query: HistogramData,
+    pub excluded_raw_anchors_by_erase_useless_per_query: HistogramData,
 }
 
-impl AnchorStats {
+impl AnchorStatsPerQuery {
     pub fn iter_histograms(&self) -> impl Iterator<Item = &HistogramData> {
         [
-            &self.anchors_per_non_excluded_seed,
-            &self.kept_anchors_per_partly_excluded_seed,
-            &self.raw_anchors_per_fully_excluded_seed,
-            &self.anchors_per_query_from_non_excluded_seeds,
-            &self.excluded_raw_anchors_per_query,
+            &self.fully_excluded_seeds_per_query,
+            &self.kept_anchors_per_query,
+            &self.excluded_raw_anchors_by_soft_cap_per_query,
+            &self.excluded_raw_anchors_by_erase_useless_per_query,
         ]
         .into_iter()
     }
 
     pub fn iter_metric_names(&self) -> impl Iterator<Item = &'static str> {
         [
-            "Anchors per non excluded seed",
-            "Kept anchors per partly excluded seed",
-            "Raw anchors per fully excluded seed",
+            "Fully excluded seeds per query",
             "Anchors per query from non excluded seeds",
-            "Excluded raw anchors per query",
+            "Excluded raw anchors by soft cap per query",
+            "Excluded raw anchors by erase useless per query",
+        ]
+        .into_iter()
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AnchorStatsPerSeed {
+    pub kept_anchors_per_kept_seed: HistogramData,
+    pub excluded_raw_anchors_by_soft_cap_per_kept_seed: HistogramData,
+    pub excluded_raw_anchors_by_erase_useless_per_kept_seed: HistogramData,
+}
+
+impl AnchorStatsPerSeed {
+    pub fn iter_histograms(&self) -> impl Iterator<Item = &HistogramData> {
+        [
+            &self.kept_anchors_per_kept_seed,
+            &self.excluded_raw_anchors_by_soft_cap_per_kept_seed,
+            &self.excluded_raw_anchors_by_erase_useless_per_kept_seed,
+        ]
+        .into_iter()
+    }
+
+    pub fn iter_metric_names(&self) -> impl Iterator<Item = &'static str> {
+        [
+            "Kept anchors per kept seed",
+            "Excluded raw anchors by soft cap per kept seed",
+            "Excluded raw anchors by erase useless per kept seed",
         ]
         .into_iter()
     }
