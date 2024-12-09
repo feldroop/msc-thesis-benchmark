@@ -453,34 +453,38 @@ fn max_anchors(
     suite_config: &BenchmarkSuiteConfig,
     benchmark_config: &BenchmarkConfig,
 ) -> Result<()> {
-    let mut values = vec![
-        (50, 20),
-        (500, 20),
-        (50, 50),
-        (200, 200),
-        (u64::MAX, 50),
-        (u64::MAX, 200),
-    ];
-    if benchmark_config.reference == Reference::Simulated {
-        values.push((u64::MAX, u64::MAX));
-    }
+    for pex_seed_errors in [1, 2] {
+        let mut values = vec![
+            (50, 20),
+            (500, 20),
+            (50, 50),
+            (200, 200),
+            (u64::MAX, 50),
+            (u64::MAX, 200),
+        ];
 
-    let res = FloxerParameterBenchmark::from_iter(values.into_iter().map(
-        |(max_num_anchors_hard, max_num_anchors_soft)| FloxerConfig {
-            algorithm_config: FloxerAlgorithmConfig {
-                max_num_anchors_hard,
-                max_num_anchors_soft,
-                ..Default::default()
+        if benchmark_config.reference == Reference::Simulated {
+            values.push((u64::MAX, u64::MAX));
+        }
+
+        let res = FloxerParameterBenchmark::from_iter(values.into_iter().map(
+            |(max_num_anchors_hard, max_num_anchors_soft)| FloxerConfig {
+                algorithm_config: FloxerAlgorithmConfig {
+                    max_num_anchors_hard,
+                    max_num_anchors_soft,
+                    pex_seed_errors,
+                    ..Default::default()
+                },
+                name: format!("{max_num_anchors_hard}_{max_num_anchors_soft}"),
+                ..From::from(benchmark_config)
             },
-            name: format!("{max_num_anchors_hard}_{max_num_anchors_soft}"),
-            ..From::from(benchmark_config)
-        },
-    ))
-    .name("max_anchors")
-    .run(suite_config, benchmark_config)?;
+        ))
+        .name(format!("max_anchors_{pex_seed_errors}_seed_errors"))
+        .run(suite_config, benchmark_config)?;
 
-    res.plot_seed_stats(suite_config);
-    res.plot_anchor_stats(suite_config);
+        res.plot_seed_stats(suite_config);
+        res.plot_anchor_stats(suite_config);
+    }
 
     Ok(())
 }
