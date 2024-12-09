@@ -635,7 +635,9 @@ fn pex_seed_errors_no_max_anchors(
     suite_config: &BenchmarkSuiteConfig,
     benchmark_config: &BenchmarkConfig,
 ) -> Result<()> {
-    if benchmark_config.reference == Reference::HumanGenomeHg38 {
+    if benchmark_config.reference == Reference::HumanGenomeHg38
+        || benchmark_config.reference == Reference::MaskedHumanGenomeHg38
+    {
         bail!("no_max_anchors benchmark skipped for real human genome (repeats would cause ENORMOUS performance issues without max anchors)");
     }
 
@@ -663,7 +665,9 @@ fn pex_seed_errors_no_max_anchors_and_high_error_rate(
     suite_config: &BenchmarkSuiteConfig,
     benchmark_config: &BenchmarkConfig,
 ) -> Result<()> {
-    if benchmark_config.reference == Reference::HumanGenomeHg38 {
+    if benchmark_config.reference == Reference::HumanGenomeHg38
+        || benchmark_config.reference == Reference::MaskedHumanGenomeHg38
+    {
         bail!("no_max_anchors benchmark skipped for real human genome (repeats would cause ENORMOUS performance issues without max anchors)");
     }
 
