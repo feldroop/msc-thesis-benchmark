@@ -2,6 +2,7 @@ use clap::{Args, Parser};
 use std::path::PathBuf;
 
 use crate::benchmarks::Benchmark;
+use crate::readmappers::floxer::CigarOutput;
 use crate::readmappers::{Queries, Reference};
 
 #[derive(Parser)]
@@ -32,6 +33,9 @@ pub struct BenchmarkConfig {
 
     #[arg(short, long, value_enum, default_value_t = Queries::HumanWgsNanopore)]
     pub queries: Queries,
+
+    #[arg(short, long, value_enum, default_value_t = CigarOutput::Off)]
+    pub cigar_output: CigarOutput,
 }
 
 impl BenchmarkConfig {

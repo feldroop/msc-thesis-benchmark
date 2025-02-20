@@ -12,6 +12,7 @@ use std::{fs, process::Command};
 
 use super::{IndexStrategy, Queries, Reference, ResourceMetrics};
 use anyhow::{bail, Result};
+use clap::ValueEnum;
 use serde::Deserialize;
 use strum::{Display, EnumIter};
 
@@ -26,6 +27,7 @@ pub enum QueryErrors {
 pub enum AnchorGroupOrder {
     ErrorsFirst,
     CountFirst,
+    None,
 }
 
 #[derive(Debug, Copy, Clone, EnumIter, Display)]
@@ -64,7 +66,7 @@ pub enum StatsInputHint {
     Simulated,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, ValueEnum)]
 pub enum CigarOutput {
     On,
     Off,
