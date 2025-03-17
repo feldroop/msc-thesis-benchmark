@@ -273,6 +273,7 @@ fn anchor_group_order_and_choice_strategy(
                 AnchorChoiceStrategy::FullGroups,
             ),
             (AnchorGroupOrder::None, AnchorChoiceStrategy::FullGroups),
+            (AnchorGroupOrder::None, AnchorChoiceStrategy::FirstReported),
         ]
         .into_iter()
         .map(

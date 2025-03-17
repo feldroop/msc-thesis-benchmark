@@ -35,6 +35,7 @@ pub enum AnchorGroupOrder {
 pub enum AnchorChoiceStrategy {
     RoundRobin,
     FullGroups,
+    FirstReported,
 }
 
 #[derive(Debug, Copy, Clone, EnumIter, Display)]
