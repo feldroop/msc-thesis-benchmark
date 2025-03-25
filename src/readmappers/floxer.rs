@@ -99,7 +99,7 @@ impl Default for FloxerAlgorithmConfig {
         FloxerAlgorithmConfig {
             index_strategy: IndexStrategy::ReadFromDiskIfStored,
             query_errors: QueryErrors::Rate(DEFAULT_ERROR_RATE),
-            pex_seed_errors: 2,
+            pex_seed_errors: 1,
             max_num_anchors_hard: u64::MAX,
             max_num_anchors_soft: 100,
             anchor_group_order: AnchorGroupOrder::CountFirst,
