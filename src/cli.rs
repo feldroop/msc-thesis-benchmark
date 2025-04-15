@@ -34,7 +34,7 @@ pub struct BenchmarkConfig {
     #[arg(short, long, value_enum, default_value_t = Queries::HumanWgsNanopore)]
     pub queries: Queries,
 
-    #[arg(short, long, value_enum, default_value_t = CigarOutput::Off)]
+    #[arg(long, value_enum, default_value_t = CigarOutput::Off)]
     pub cigar_output: CigarOutput,
 }
 
@@ -49,13 +49,6 @@ impl BenchmarkConfig {
     pub fn with_queries(&self, queries: Queries) -> Self {
         BenchmarkConfig {
             queries,
-            ..self.clone()
-        }
-    }
-
-    pub fn with_smaller_queries(&self) -> Self {
-        BenchmarkConfig {
-            queries: self.queries.smaller_equivalent(),
             ..self.clone()
         }
     }

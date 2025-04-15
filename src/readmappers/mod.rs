@@ -83,16 +83,6 @@ impl Queries {
         }
     }
 
-    pub fn smaller_equivalent(&self) -> Self {
-        match self {
-            Queries::HumanWgsNanopore | Queries::HumanWgsNanoporeSmall => {
-                Queries::HumanWgsNanoporeSmall
-            }
-            Queries::Debug | Queries::ProblemQuery => *self,
-            Queries::Simulated | Queries::SimulatedSmall => Queries::SimulatedSmall,
-        }
-    }
-
     fn floxer_stats_input_hint(&self) -> Option<StatsInputHint> {
         match self {
             Queries::HumanWgsNanopore => Some(StatsInputHint::RealNanopore),

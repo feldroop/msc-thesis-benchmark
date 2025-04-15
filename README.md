@@ -1,6 +1,8 @@
 # Master's Thesis Benchmark
 
-The code I used to evaluate the read mapper [floxer](https://github.com/feldroop/floxer) I developed for my master's thesis.
+The code I use to evaluate the read mapper [floxer](https://github.com/feldroop/floxer) I developed for my master's thesis. This project is not intented for general use. Some of the code is an absolute mess, because when the thesis
+deadline approached, things had to be done quickly. However, I still believe that this program can be used to
+reproduce the results from my thesis without too much effort.
 
 ## Usage
 

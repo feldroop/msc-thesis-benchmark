@@ -34,7 +34,7 @@ pub enum AnchorGroupOrder {
 #[strum(serialize_all = "snake_case")]
 pub enum AnchorChoiceStrategy {
     RoundRobin,
-    FullGroups,
+    FullCursor,
     FirstReported,
 }
 
@@ -67,6 +67,13 @@ pub enum StatsInputHint {
     Simulated,
 }
 
+#[derive(Debug, Copy, Clone, EnumIter, Display)]
+#[strum(serialize_all = "snake_case")]
+pub enum EraseUselessAnchors {
+    On,
+    Off,
+}
+
 #[derive(Debug, Copy, Clone, ValueEnum)]
 pub enum CigarOutput {
     On,
@@ -83,6 +90,7 @@ pub struct FloxerAlgorithmConfig {
     pub anchor_group_order: AnchorGroupOrder,
     pub anchor_choice_strategy: AnchorChoiceStrategy,
     pub seed_sampling_step_size: u16,
+    pub erase_useless_anchors: EraseUselessAnchors,
     pub pex_tree_construction: PexTreeConstruction,
     pub interval_optimization: IntervalOptimization,
     pub extra_verification_ratio: f64,
@@ -91,20 +99,22 @@ pub struct FloxerAlgorithmConfig {
     pub num_threads: u16,
 }
 
-pub const DEFAULT_ERROR_RATE: f64 = 0.09;
+pub const DEFAULT_ERROR_RATE: f64 = 0.08;
 pub const HIGH_ERROR_RATE: f64 = 0.15;
+pub const DEFAULT_PEX_SEED_ERRORS: u8 = 1;
 
 impl Default for FloxerAlgorithmConfig {
     fn default() -> Self {
         FloxerAlgorithmConfig {
             index_strategy: IndexStrategy::ReadFromDiskIfStored,
             query_errors: QueryErrors::Rate(DEFAULT_ERROR_RATE),
-            pex_seed_errors: 1,
+            pex_seed_errors: DEFAULT_PEX_SEED_ERRORS,
             max_num_anchors_hard: u64::MAX,
-            max_num_anchors_soft: 100,
+            max_num_anchors_soft: 50,
             anchor_group_order: AnchorGroupOrder::CountFirst,
             anchor_choice_strategy: AnchorChoiceStrategy::RoundRobin,
             seed_sampling_step_size: 1,
+            erase_useless_anchors: EraseUselessAnchors::On,
             pex_tree_construction: PexTreeConstruction::BottomUp,
             interval_optimization: IntervalOptimization::On,
             extra_verification_ratio: 0.1,
@@ -135,7 +145,7 @@ impl From<&BenchmarkConfig> for FloxerConfig {
             queries: value.queries,
             only_analysis: value.only_analysis,
             algorithm_config: Default::default(),
-            cigar_output: CigarOutput::Off,
+            cigar_output: value.cigar_output,
         }
     }
 }
@@ -289,6 +299,10 @@ impl FloxerConfig {
 
         if let VerificationAlgorithm::DirectFull = self.algorithm_config.verification_algorithm {
             command.arg("--direct-full-verification");
+        }
+
+        if let EraseUselessAnchors::Off = self.algorithm_config.erase_useless_anchors {
+            command.arg("--dont-erase-useless-anchors");
         }
 
         if let Some(stats_input_hint) = self.queries.floxer_stats_input_hint() {
@@ -512,8 +526,8 @@ impl HistogramData {
     pub fn axis_names(&self) -> Vec<String> {
         self.thresholds
             .iter()
-            .map(|threshold| format!("<= {threshold}"))
-            .chain([String::from("<= inf")])
+            .map(|threshold| threshold.to_string())
+            .chain([String::from("inf")])
             .collect()
     }
 

@@ -1,3 +1,5 @@
+pub mod thesis;
+
 use std::fs;
 
 use crate::{
@@ -9,15 +11,18 @@ use crate::{
 
 use charming::{
     component::{Axis, Grid, Legend, Title},
-    element::{Formatter, Label, LabelPosition, NameLocation, TextStyle},
+    element::{AxisLabel, Formatter, Label, LabelPosition, NameLocation, TextStyle},
     series::Bar,
     Chart, ImageRenderer,
 };
 
+const AXIS_TEXT_SIZE: i32 = 25;
+
 static SUBTITLE_FONT_SIZE: u8 = 20;
 static LABEL_FONT_SIZE: u8 = 15;
 static GRID_OUTERMOST_OFFSET: usize = 6;
-static JS_FLOAT_FORMATTER: &str = "function (param) { return param.data.toFixed(2); }";
+static JS_FLOAT_FORMATTER: &str = "function (param) { return param.data.toFixed(1); }";
+static JS_FLOAT_FORMATTER_0: &str = "function (param) { return param.data.toFixed(0); }";
 
 pub fn plot_resource_metrics<'a>(
     benchmark_name: &str,
@@ -25,21 +30,43 @@ pub fn plot_resource_metrics<'a>(
     benchmark_folder: &BenchmarkFolder,
     suite_config: &BenchmarkSuiteConfig,
 ) {
-    let offset_str = "54%";
-
     let mut chart = Chart::new()
-        .legend(Legend::new().right("10%"))
-        .grid(Grid::new().right(offset_str))
-        .grid(Grid::new().left(offset_str))
+        .legend(
+            Legend::new()
+                .right("10%")
+                .text_style(TextStyle::new().font_size(20).color("black")),
+        )
+        .grid(Grid::new().right("37%").top("10%"))
+        .grid(Grid::new().left("71%").top("10%"))
         .background_color("white")
         .x_axis(
             Axis::new()
                 .data(vec!["Wall Time", "User CPU Time", "System CPU Time"])
-                .grid_index(0),
+                .grid_index(0)
+                .name_text_style(TextStyle::new().font_size(AXIS_TEXT_SIZE).color("black"))
+                .axis_label(AxisLabel::new().font_size(18).color("black")),
         )
-        .y_axis(Axis::new().name("Seconds").grid_index(0))
-        .x_axis(Axis::new().data(vec!["Peak Memory Usage"]).grid_index(1))
-        .y_axis(Axis::new().name("Kilobytes").grid_index(1));
+        .y_axis(
+            Axis::new()
+                .name("Seconds")
+                .name_text_style(TextStyle::new().font_size(AXIS_TEXT_SIZE).color("black"))
+                .grid_index(0)
+                .axis_label(AxisLabel::new().font_size(AXIS_TEXT_SIZE).color("black")),
+        )
+        .x_axis(
+            Axis::new()
+                .data(vec!["Peak Memory Usage"])
+                .grid_index(1)
+                .name_text_style(TextStyle::new().font_size(AXIS_TEXT_SIZE).color("black"))
+                .axis_label(AxisLabel::new().font_size(18).color("black")),
+        )
+        .y_axis(
+            Axis::new()
+                .name("Gibibytes")
+                .name_text_style(TextStyle::new().font_size(AXIS_TEXT_SIZE).color("black"))
+                .grid_index(1)
+                .axis_label(AxisLabel::new().font_size(AXIS_TEXT_SIZE).color("black")),
+        );
 
     for (metrics, name) in metrics_and_names_of_runs.into_iter() {
         chart = chart
@@ -50,21 +77,35 @@ pub fn plot_resource_metrics<'a>(
                         metrics.user_cpu_seconds,
                         metrics.system_cpu_seconds,
                     ])
-                    .name(name)
+                    .name(name.replace("_", " "))
                     .x_axis_index(0)
                     .y_axis_index(0)
-                    .label(Label::new().show(true).position(LabelPosition::Top)),
+                    .label(
+                        Label::new()
+                            .show(true)
+                            .position(LabelPosition::Top)
+                            .font_size(18)
+                            .color("black")
+                            .formatter(Formatter::Function(JS_FLOAT_FORMATTER.into())),
+                    ),
             )
             .series(
                 Bar::new()
                     .data(vec![
-                        metrics.peak_memory_kilobytes as i64,
+                        (metrics.peak_memory_kilobytes as i64) / 1_000_000,
                         // metrics.average_memory_kilobytes as i64, <-- seems to be not available and is not as important
                     ])
-                    .name(name)
+                    .name(name.replace("_", " "))
                     .x_axis_index(1)
                     .y_axis_index(1)
-                    .label(Label::new().show(true).position(LabelPosition::Top)),
+                    .label(
+                        Label::new()
+                            .show(true)
+                            .position(LabelPosition::Top)
+                            .font_size(18)
+                            .color("black")
+                            .formatter(Formatter::Function(JS_FLOAT_FORMATTER.into())),
+                    ),
             );
     }
 
@@ -87,42 +128,25 @@ pub fn plot_mapped_reads_stats<'a, S>(
 ) where
     S: AsRef<str>,
 {
-    let offset_str = "54%";
     let instance_names: Vec<_> = instance_names
         .into_iter()
         .map(|s| s.as_ref().to_owned())
         .collect();
 
-    let (num_mapped_per_instance, edit_distances_per_instance): (Vec<_>, Vec<_>) = iter
-        .into_iter()
-        .map(|stats| {
-            (
-                stats.num_mapped,
-                stats.primary_alignment_edit_distances.clone(),
-            )
-        })
-        .collect();
-
-    let edit_distance_averages: Vec<_> = edit_distances_per_instance
-        .iter()
-        .map(|edit_distances| {
-            let sum: i64 = edit_distances.iter().map(|&value| value as i64).sum();
-            let avg = sum as f64 / edit_distances.len() as f64;
-            ((avg * 1000.0).round()) / 1000.0
-        })
-        .collect();
+    let num_mapped_per_instance: Vec<_> = iter.into_iter().map(|stats| stats.num_mapped).collect();
 
     let chart = Chart::new()
-        .grid(Grid::new().right(offset_str))
-        .grid(Grid::new().left(offset_str))
         .background_color("white")
-        .x_axis(Axis::new().data(instance_names.clone()).grid_index(0))
-        .y_axis(Axis::new().name("Number of aligned queries").grid_index(0))
-        .x_axis(Axis::new().data(instance_names).grid_index(1))
+        .x_axis(
+            Axis::new()
+                .data(instance_names.clone())
+                .axis_label(AxisLabel::new().font_size(AXIS_TEXT_SIZE)),
+        )
         .y_axis(
             Axis::new()
-                .name("Avg. edit distance of primary alignments")
-                .grid_index(1),
+                .name("Number of aligned queries")
+                .name_text_style(TextStyle::new().font_size(AXIS_TEXT_SIZE))
+                .axis_label(AxisLabel::new().font_size(AXIS_TEXT_SIZE)),
         )
         .series(
             Bar::new()
@@ -130,18 +154,6 @@ pub fn plot_mapped_reads_stats<'a, S>(
                 .x_axis_index(0)
                 .y_axis_index(0)
                 .label(Label::new().show(true).position(LabelPosition::Top)),
-        )
-        .series(
-            Bar::new()
-                .data(edit_distance_averages)
-                .x_axis_index(1)
-                .y_axis_index(1)
-                .label(
-                    Label::new()
-                        .show(true)
-                        .position(LabelPosition::Top)
-                        .formatter(Formatter::Function(JS_FLOAT_FORMATTER.into())),
-                ),
         );
 
     let plot_name_for_file = title.to_ascii_lowercase().replace(' ', "_");
@@ -385,16 +397,30 @@ pub fn create_floxer_vs_minimap_plots(
     let floxer_data = &data.floxer_stats_if_floxer_mapped;
 
     let mapping_status_chart = Chart::new()
-        .legend(Legend::new().right("10%"))
+        .legend(
+            Legend::new()
+                .right("10%")
+                .left("20%")
+                .text_style(TextStyle::new().font_size(20).color("black")),
+        )
         .background_color("white")
-        .x_axis(Axis::new().data(vec![
-            "Minimap",
-            "Floxer",
-            "Both mapped",
-            "Only Minimap",
-            "Only Floxer",
-        ]))
-        .y_axis(Axis::new())
+        .x_axis(
+            Axis::new()
+                .data(vec![
+                    "Minimap",
+                    "Floxer",
+                    "Both mapped",
+                    "Only Minimap",
+                    "Only Floxer",
+                ])
+                .axis_label(AxisLabel::new().font_size(14).color("black")),
+        )
+        .y_axis(
+            Axis::new()
+                .name_text_style(TextStyle::new().font_size(25).color("black"))
+                .name("#Reads")
+                .axis_label(AxisLabel::new().font_size(18).color("black")),
+        )
         .series(
             Bar::new()
                 .stack("all")
@@ -406,7 +432,12 @@ pub fn create_floxer_vs_minimap_plots(
                     only_minimap_data.num_basic,
                     data.general_stats.minimap_unmapped_and_floxer_mapped,
                 ])
-                .label(Label::new().show(true).position(LabelPosition::Inside)),
+                .label(
+                    Label::new()
+                        .show(true)
+                        .position(LabelPosition::Inside)
+                        .font_size(18),
+                ),
         )
         .series(
             Bar::new()
@@ -418,7 +449,12 @@ pub fn create_floxer_vs_minimap_plots(
                     both_data.num_best_significantly_clipped,
                     only_minimap_data.num_best_significantly_clipped,
                 ])
-                .label(Label::new().show(true).position(LabelPosition::Inside)),
+                .label(
+                    Label::new()
+                        .show(true)
+                        .position(LabelPosition::Inside)
+                        .font_size(18),
+                ),
         )
         .series(
             Bar::new()
@@ -430,7 +466,12 @@ pub fn create_floxer_vs_minimap_plots(
                     both_data.num_best_high_edit_distance,
                     only_minimap_data.num_best_high_edit_distance,
                 ])
-                .label(Label::new().show(true).position(LabelPosition::Inside)),
+                .label(
+                    Label::new()
+                        .show(true)
+                        .position(LabelPosition::Inside)
+                        .font_size(18),
+                ),
         )
         .series(
             Bar::new()
@@ -442,7 +483,12 @@ pub fn create_floxer_vs_minimap_plots(
                     both_data.num_best_chimeric_or_inversion,
                     only_minimap_data.num_best_chimeric_or_inversion,
                 ])
-                .label(Label::new().show(true).position(LabelPosition::Inside)),
+                .label(
+                    Label::new()
+                        .show(true)
+                        .position(LabelPosition::Inside)
+                        .font_size(18),
+                ),
         )
         .series(
             Bar::new()
@@ -452,7 +498,12 @@ pub fn create_floxer_vs_minimap_plots(
                     num_total_queries - minimap_data.num_queries,
                     num_total_queries - floxer_data.num_queries,
                 ])
-                .label(Label::new().show(true).position(LabelPosition::Inside)),
+                .label(
+                    Label::new()
+                        .show(true)
+                        .position(LabelPosition::Inside)
+                        .font_size(18),
+                ),
         );
 
     // 15478 minimap whre did I lose?

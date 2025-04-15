@@ -51,6 +51,7 @@ pub fn analyze_alignments_simple<P: AsRef<Path>>(
 #[derive(Debug, Clone)]
 pub struct SimpleMappedReadsStats {
     pub num_mapped: i32,
+    #[allow(unused)]
     pub primary_alignment_edit_distances: Vec<i32>,
 }
 
